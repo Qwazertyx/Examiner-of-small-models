@@ -1,0 +1,216 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Directions artistiques</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Pixelify+Sans:wght@400;600&family=Silkscreen&family=Special+Elite&family=VT323&display=swap" rel="stylesheet">
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 32px 16px 64px; background: #e7e7ea; color: #1c1c1f; font: 16px/1.5 system-ui, sans-serif; }
+  .page { max-width: 1160px; margin: 0 auto; }
+  h1 { font-size: 28px; margin: 0 0 4px; }
+  .lede { margin: 0 0 32px; max-width: 60ch; }
+  .grid { display: grid; gap: 48px 40px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 460px), 1fr)); }
+  article h2 { font-size: 20px; margin: 0 0 12px; }
+  article dl { margin: 16px 0 0; display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; max-width: 60ch; }
+  article dt { font-weight: 600; }
+  article dd { margin: 0; }
+  .swatches { display: flex; gap: 6px; margin-top: 12px; }
+  .swatches i { width: 28px; height: 28px; border: 1px solid #0003; }
+  .mock { width: 100%; max-width: 520px; }
+  .mock p { margin: 0; }
+  svg.portrait { display: block; shape-rendering: crispEdges; }
+
+  /* A. Drawer phone: 1-bit LCD */
+  .phone { background: #1d1e21; border-radius: 34px; padding: 26px 20px 22px; }
+  .phone .speaker { width: 64px; height: 6px; border-radius: 3px; background: #3a3c41; margin: 0 auto 16px; }
+  .lcd { --ink: #26301a; background: #c5cf9d; color: var(--ink); font: 15px/1.45 "Silkscreen", monospace; padding: 10px 12px 0;
+         background-image: linear-gradient(#aab58322 1px, transparent 1px), linear-gradient(90deg, #aab58322 1px, transparent 1px); background-size: 3px 3px;
+         box-shadow: inset 0 0 0 3px #8f9a6c, inset 0 6px 14px #0003; }
+  .lcd-top { display: flex; justify-content: space-between; align-items: center; padding-bottom: 8px; border-bottom: 3px solid var(--ink); }
+  .bars { display: flex; align-items: flex-end; gap: 2px; height: 14px; }
+  .bars i { width: 4px; background: var(--ink); }
+  .bars i:nth-child(1) { height: 4px; } .bars i:nth-child(2) { height: 7px; } .bars i:nth-child(3) { height: 10px; } .bars i:nth-child(4) { height: 14px; }
+  .batt { width: 26px; height: 12px; border: 3px solid var(--ink); background: linear-gradient(90deg, var(--ink) 60%, transparent 60%); }
+  .lcd-who { display: flex; gap: 14px; align-items: center; padding: 12px 0; }
+  .lcd-who svg { width: 96px; height: 96px; flex: none; }
+  .lcd-who b { font-size: 24px; font-weight: 400; }
+  .lcd-line { padding-bottom: 12px; }
+  .lcd-pick { background: var(--ink); color: #c5cf9d; padding: 2px 6px; margin: 0 -6px 8px !important; }
+  .lcd-q { border-top: 3px dotted var(--ink); padding: 8px 0; }
+  .lcd-q i { display: inline-block; width: 9px; height: 15px; background: var(--ink); vertical-align: -2px; margin-left: 3px; }
+  .lcd-keys { display: flex; justify-content: space-between; margin: 0 -12px; padding: 5px 12px; background: var(--ink); color: #c5cf9d; }
+  .pad { display: flex; justify-content: space-between; align-items: center; padding: 18px 26px 0; }
+  .pad span { width: 84px; height: 18px; border-radius: 9px; background: #3a3c41; }
+  .pad b { width: 54px; height: 54px; border-radius: 50%; border: 9px solid #3a3c41; }
+
+  /* B. Night precinct: 16-bit colour */
+  .precinct { --night: #0e1a1f; --wall: #1f3a3d; --lamp: #f0a63a; --signal: #e2574c; --paper: #f4e8cf; background: var(--night); color: var(--paper);
+              font: 19px/1.35 "Pixelify Sans", sans-serif; padding: 12px; }
+  .pc-top { display: flex; justify-content: space-between; color: var(--lamp); padding: 0 4px 10px; }
+  .pc-scene { position: relative; height: 216px; background: repeating-linear-gradient(0deg, transparent 0 12px, #f0a63a3d 12px 18px), var(--wall); border-bottom: 6px solid #071013; overflow: hidden; }
+  .pc-scene svg { position: absolute; left: 28px; bottom: 0; width: 192px; height: 192px; }
+  .pc-slot { position: absolute; right: 16px; top: 16px; width: 104px; background: var(--night); border: 4px solid var(--signal); padding: 8px; text-align: center; font-size: 16px; line-height: 1.2; }
+  .pc-slot i { display: block; width: 32px; height: 28px; margin: 0 auto 6px; background: var(--paper); box-shadow: 8px 6px 0 -2px var(--night), 10px 6px 0 0 var(--paper); border-bottom: 4px solid var(--lamp); }
+  .pc-box { position: relative; margin: 22px 4px 4px; padding: 20px 14px 10px; background: var(--night);
+            box-shadow: 0 -4px 0 var(--paper), 0 4px 0 var(--paper), -4px 0 0 var(--paper), 4px 0 0 var(--paper); }
+  .pc-name { position: absolute; top: -18px; left: 10px; background: var(--lamp); color: var(--night); padding: 0 10px; font-weight: 600; }
+  .pc-box small { display: block; margin-top: 8px; font-size: 15px; color: var(--lamp); }
+  .pc-ask { display: flex; margin: 16px 4px 4px; background: #071013; border: 4px solid var(--wall); }
+  .pc-ask span { flex: 1; padding: 8px 10px; }
+  .pc-ask span::after { content: ""; display: inline-block; width: 10px; height: 4px; margin-left: 4px; background: var(--signal); }
+  .pc-ask b { background: var(--signal); color: var(--night); padding: 8px 18px; font-weight: 600; }
+
+  /* C. Case file: paper and typewriter */
+  .folder { --ink: #1e2b45; --stamp: #b3261e; background: #d6c08a; padding: 0 18px 22px; font: 16px/1.6 "Special Elite", "Courier New", monospace; color: var(--ink); }
+  .folder .tab { display: inline-block; background: #c9b178; padding: 8px 18px 6px; margin-left: -18px; border-bottom: 1px solid #a89460; }
+  .sheet { position: relative; background: #f3eedd; margin-top: 16px; padding: 26px 24px 22px; transform: rotate(-0.7deg); box-shadow: 0 2px 0 #b9a36d, 0 8px 18px #5b574e40; }
+  .photo { float: right; margin: -40px -8px 12px 18px; background: #fff; padding: 7px 7px 4px; transform: rotate(3deg); box-shadow: 0 2px 6px #0004; text-align: center; font-size: 13px; position: relative; }
+  .photo::before { content: ""; position: absolute; top: -9px; left: 50%; width: 58px; height: 20px; margin-left: -29px; background: #e8dfae; opacity: .85; transform: rotate(-4deg); }
+  .photo svg { width: 96px; height: 96px; background: #8f8b80; }
+  .sheet .tw { margin-bottom: 12px; }
+  .stamp { display: inline-block; border: 3px solid var(--stamp); color: var(--stamp); padding: 2px 12px 0; letter-spacing: .12em; text-transform: uppercase; transform: rotate(-6deg); opacity: .82; margin: 2px 0 14px 34px; }
+  .tag { clear: both; display: inline-block; background: #e9ddb6; border: 1px solid #a89460; padding: 4px 12px 2px 26px; position: relative; font-size: 14px; }
+  .tag::before { content: ""; position: absolute; left: 9px; top: 50%; width: 8px; height: 8px; margin-top: -5px; border-radius: 50%; border: 1px solid #5b574e; background: #f3eedd; }
+  .blank { display: inline-block; width: 68%; border-bottom: 1px solid var(--ink); height: 1.1em; vertical-align: bottom; }
+  .left { margin-top: 14px !important; color: #5b574e; font-size: 14px; text-align: right; }
+
+  /* D. Teletext: broadcast blocks */
+  .tele { background: #000; color: #fff; font: 27px/1.08 "VT323", monospace; padding: 14px 16px 0; }
+  .tele .w { color: #fff; } .tele .y { color: #ff0; } .tele .c { color: #0ff; } .tele .g { color: #0f0; } .tele .m { color: #f0f; }
+  .tt-head { display: flex; justify-content: space-between; }
+  .tt-title { background: #00f; color: #ff0; font-size: 54px; line-height: 1; padding: 6px 8px 8px; margin: 8px 0 14px; }
+  .tt-body { display: flex; gap: 16px; align-items: flex-start; margin-bottom: 14px; }
+  .tt-body svg { width: 128px; height: 128px; flex: none; }
+  .tt-body p + p { margin-top: 8px; }
+  .tele .blk { display: inline-block; width: 13px; height: 22px; background: #fff; vertical-align: -3px; margin-left: 4px; }
+  .tt-fast { display: flex; margin: 14px -16px 0; }
+  .tele .tt-fast span { flex: 1; padding: 4px 0 6px 12px; color: #000; }
+  .tt-fast .r { background: #f00; } .tt-fast .g { background: #0f0; } .tt-fast .y { background: #ff0; } .tt-fast .c { background: #0ff; }
+</style>
+</head>
+<body>
+<div class="page">
+  <h1>Quatre directions artistiques</h1>
+  <p class="lede">Le même moment du jeu dans chaque style : Ada répond à une question, le joueur tient un indice. Choisis-en une, ou dis-moi ce que tu veux mélanger.</p>
+
+  <div class="grid">
+    <article>
+      <h2>A. Téléphone du tiroir</h2>
+      <div class="mock phone">
+        <div class="speaker"></div>
+        <div class="lcd">
+          <div class="lcd-top"><span class="bars"><i></i><i></i><i></i><i></i></span><span>9 questions left</span><span class="batt"></span></div>
+          <div class="lcd-who"><svg class="portrait" data-p="lcd" viewBox="0 0 16 16"></svg><div><b>Ada</b><br>developer<br>first one in</div></div>
+          <p class="lcd-line">I was at my desk from 8:30. I never went to the break room.</p>
+          <p class="lcd-pick">Show: warm mug</p>
+          <p class="lcd-q">Where were you this morning?<i></i></p>
+          <div class="lcd-keys"><span>Ask</span><span>Clues</span></div>
+        </div>
+        <div class="pad"><span></span><b></b><span></span></div>
+      </div>
+      <div class="swatches"><i style="background:#c5cf9d"></i><i style="background:#8f9a6c"></i><i style="background:#26301a"></i><i style="background:#1d1e21"></i><i style="background:#3a3c41"></i></div>
+      <dl>
+        <dt>Idée</dt><dd>Pixel art en une seule couleur : l'écran imite l'affichage d'un vieux portable, la machine qui fait tourner le jeu.</dd>
+        <dt>Pour</dt><dd>Lié au concept, aucun dessin lourd, parfait sur mobile.</dd>
+        <dt>Contre</dt><dd>Monochrome, donc moins spectaculaire en capture d'écran.</dd>
+      </dl>
+    </article>
+
+    <article>
+      <h2>B. Commissariat de nuit</h2>
+      <div class="mock precinct">
+        <div class="pc-top"><span>The Last Croissant</span><span>9 questions left</span></div>
+        <div class="pc-scene">
+          <svg class="portrait" data-p="night" viewBox="0 0 16 16"></svg>
+          <div class="pc-slot"><i></i>Warm mug</div>
+        </div>
+        <div class="pc-box"><span class="pc-name">Ada</span><p>I was at my desk from 8:30. I never went to the break room.</p><small>answered by the phone</small></div>
+        <div class="pc-ask"><span>Where were you this morning?</span><b>Ask</b></div>
+      </div>
+      <div class="swatches"><i style="background:#0e1a1f"></i><i style="background:#1f3a3d"></i><i style="background:#f0a63a"></i><i style="background:#e2574c"></i><i style="background:#f4e8cf"></i></div>
+      <dl>
+        <dt>Idée</dt><dd>Pixel art 16 bits en couleurs : grand portrait, stores éclairés, boîte de dialogue de jeu d'aventure.</dd>
+        <dt>Pour</dt><dd>Le plus « jeu vidéo », le plus proche du pixel art que tu aimes.</dd>
+        <dt>Contre</dt><dd>Un portrait et un décor à dessiner par suspect : la direction la plus longue à produire.</dd>
+      </dl>
+    </article>
+
+    <article>
+      <h2>C. Dossier d'enquête</h2>
+      <div class="mock folder">
+        <div class="tab">Case 01 / The Last Croissant</div>
+        <div class="sheet">
+          <div class="photo"><svg class="portrait" data-p="photo" viewBox="0 0 16 16"></svg><br>Ada, developer</div>
+          <p class="tw"><b>Q.</b> Where were you this morning?</p>
+          <p class="tw"><b>A.</b> I was at my desk from 8:30. I never went to the break room.</p>
+          <span class="stamp">Unverified</span><br>
+          <div class="tag">Exhibit B, warm mug</div>
+          <p class="tw" style="margin-top:16px"><b>Q.</b> <span class="blank"></span></p>
+          <p class="left">9 questions left</p>
+        </div>
+      </div>
+      <div class="swatches"><i style="background:#d6c08a"></i><i style="background:#f3eedd"></i><i style="background:#1e2b45"></i><i style="background:#b3261e"></i><i style="background:#5b574e"></i></div>
+      <dl>
+        <dt>Idée</dt><dd>Pas de pixel art : chemise cartonnée, procès-verbal tapé à la machine, tampons et pièces à conviction.</dd>
+        <dt>Pour</dt><dd>Le texte est au centre, presque aucun dessin à produire.</dd>
+        <dt>Contre</dt><dd>Style déjà vu dans beaucoup de jeux d'enquête.</dd>
+      </dl>
+    </article>
+
+    <article>
+      <h2>D. Télétexte</h2>
+      <div class="mock tele">
+        <div class="tt-head"><span>P101</span><span>EXAMINER</span><span class="y">Mon 16 Nov</span><span class="c">20:04:31</span></div>
+        <div class="tt-title">The Last Croissant</div>
+        <div class="tt-body">
+          <svg class="portrait" data-p="tele" viewBox="0 0 16 16"></svg>
+          <div><p class="c">ADA, developer</p><p>I was at my desk from 8:30. I never went to the break room.</p><p class="g">Clue held: warm mug</p></div>
+        </div>
+        <p class="y">&gt; Where were you this morning?<span class="blk"></span></p>
+        <p class="m">9 questions left</p>
+        <div class="tt-fast"><span class="r">Ask</span><span class="g">Clues</span><span class="y">Notes</span><span class="c">Accuse</span></div>
+      </div>
+      <div class="swatches"><i style="background:#000"></i><i style="background:#00f"></i><i style="background:#ff0"></i><i style="background:#0ff"></i><i style="background:#0f0"></i><i style="background:#f00"></i></div>
+      <dl>
+        <dt>Idée</dt><dd>Les pages d'information des télés des années 80-90 : gros blocs, couleurs pures, quatre touches de couleur pour les quatre actions du jeu.</dd>
+        <dt>Pour</dt><dd>Très reconnaissable, rapide à produire, chaque suspect devient une « page ».</dd>
+        <dt>Contre</dt><dd>Fatigant pour les yeux sur une longue partie ; référence peu connue des plus jeunes.</dd>
+      </dl>
+    </article>
+  </div>
+</div>
+
+<script>
+  // One 16x16 portrait, recoloured per direction. h hair, s skin, n shade, e eye, m mouth, c clothes, k collar.
+  const FACE = [
+    "................", ".....hhhhhh.....", "....hhhhhhhh....", "...hhhhhhhhhh...",
+    "...hhsssssshh...", "...hssssssssh...", "...hsessssesh...", "...hssssssssh...",
+    "...ssssnnssss...", "....ssmmmmss....", "....ssssssss....", ".....ssssss.....",
+    "......snns......", "...cccckkcccc...", "..cccccccccccc..", ".cccccccccccccc.",
+  ];
+  const INK = "#26301a";
+  const PALETTES = {
+    lcd: { h: INK, e: INK, m: INK, n: INK, c: "dither" },
+    night: { h: "#3b2a22", s: "#f0b78a", n: "#c98862", e: "#0e1a1f", m: "#a8433f", c: "#e2574c", k: "#f4e8cf" },
+    photo: { h: "#2f2f2f", s: "#cfcabd", n: "#a9a496", e: "#1b1b1b", m: "#55524a", c: "#6d6a62", k: "#e6e1d2" },
+    tele: { h: "#ff0", s: "#fff", n: "#fff", e: "#00f", m: "#f00", c: "#0ff", k: "#f0f" },
+  };
+  for (const svg of document.querySelectorAll("svg.portrait")) {
+    const palette = PALETTES[svg.dataset.p];
+    FACE.forEach((row, y) => [...row].forEach((ch, x) => {
+      let fill = palette[ch];
+      if (fill === "dither") fill = (x + y) % 2 ? INK : null;
+      if (!fill) return;
+      const r = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+      r.setAttribute("x", x); r.setAttribute("y", y); r.setAttribute("width", 1); r.setAttribute("height", 1);
+      r.setAttribute("fill", fill);
+      svg.append(r);
+    }));
+  }
+</script>
+</body>
+</html>

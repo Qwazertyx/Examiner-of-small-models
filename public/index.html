@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Examiner of Small Models</title>
+  <meta name="description" content="An interrogation game whose suspects are played by a small language model running on an old phone.">
+  <link rel="preload" href="fonts/special-elite.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="style.css">
+  <script src="app.js" defer></script>
+</head>
+<body>
+  <main class="folder">
+    <p class="tab">Examiner of Small Models</p>
+
+    <header>
+      <h1 id="title">Opening the case</h1>
+      <p id="intro"></p>
+    </header>
+
+    <section aria-labelledby="h-suspects">
+      <h2 id="h-suspects">Suspects</h2>
+      <div id="suspects"></div>
+    </section>
+
+    <div class="spread">
+      <section class="sheet statement" aria-labelledby="h-talk">
+        <h2 id="h-talk">Statements</h2>
+        <p id="log-empty" class="hint">Nothing on record yet. Pick a suspect and ask a first question.</p>
+        <ol id="log" aria-live="polite" aria-labelledby="h-talk" tabindex="0"></ol>
+        <p id="waiting" class="notice" role="status" hidden>Waiting for the phone. A small model on an old phone plays the suspects, and it is not connected right now. This page checks every few seconds and resumes on its own.</p>
+        <form id="ask">
+          <p id="leads-label">Ask about</p>
+          <div id="leads" role="group" aria-labelledby="leads-label"></div>
+          <label for="question">Your question</label>
+          <input id="question" maxlength="200" required autocomplete="off">
+          <label for="show">Show a piece of evidence</label>
+          <select id="show"></select>
+          <button id="send">Ask</button>
+        </form>
+        <p id="status" role="status"></p>
+      </section>
+
+      <div class="side">
+        <section class="sheet plan" aria-labelledby="h-map">
+          <h2 id="h-map">Floor plan</h2>
+          <svg id="map" role="img" aria-labelledby="h-map map-legend"></svg>
+          <p id="map-legend" class="hint"></p>
+        </section>
+
+        <section aria-labelledby="h-clues">
+          <h2 id="h-clues">Evidence</h2>
+          <ul id="clues"></ul>
+        </section>
+
+        <section class="sheet notebook" aria-labelledby="h-notes">
+          <h2 id="h-notes">Notebook</h2>
+          <p id="notes-empty" class="hint">What a suspect tells you is written here in plain words.</p>
+          <ul id="notes"></ul>
+        </section>
+      </div>
+    </div>
+
+    <section class="board" aria-labelledby="h-accuse">
+      <h2 id="h-accuse">Accusation</h2>
+      <p>Name the one who did it. This ends the case, and the board wants proof.</p>
+      <button id="accuse" type="button">Accuse</button>
+      <div id="verdict" class="sheet" role="status" hidden>
+        <p id="stamp" class="stamp"></p>
+        <p id="verdict-text"></p>
+        <button id="again" type="button">Play again</button>
+      </div>
+    </section>
+  </main>
+</body>
+</html>

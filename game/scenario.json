@@ -1,0 +1,262 @@
+{
+  "title": "Three Small Models",
+  "intro": "Halden Lab, the night before the release review. At 02:14 the exam scores were erased from the Archive. Three small models spent the night here, and one of them did it. Question them, show them what you find, and bring the board a confession: it will not act on a hunch. You have 28 questions.",
+  "max_questions": 28,
+  "culprit": "pip",
+  "proof": ["confession"],
+  "solution": "Pip typed ticket 0212 itself at the Help Desk, which is why it carries no stamp. It had come last in the exam with 41, and the lowest score is retired at the review. Pip cannot erase anything on its own, but it can never refuse a request, so it wrote itself one. Grit was in the Answer Vault copying the key, and Ode was printing forty pages of poems.",
+  "start_clues": ["wipe", "schedule"],
+  "clues": {
+    "wipe": {"name": "Archive log", "text": "02:14. All exam scores erased by request. No name on the order.", "place": "archive"},
+    "schedule": {"name": "Night schedule", "text": "All three models paused from midnight to 06:00.", "place": "desk"},
+    "printer_noise": {"name": "Printer noise", "text": "Pip heard the printer run from before two until half past. Only Box 3 is wired to it.", "place": "print"},
+    "ode_alibi": {"name": "Printer log", "text": "One unbroken job from Box 3, 01:50 to 02:30. Forty pages of poems.", "place": "print"},
+    "vault_entry": {"name": "Vault door", "text": "Ode heard the Vault door open at 02:05 and close at 02:20. Only Box 2 is wired that way.", "place": "vault"},
+    "grit_alibi": {"name": "Grit's admission", "text": "Grit was in the Answer Vault from 02:05 to 02:20, copying the key. The Vault has no ticket slot.", "place": "vault"},
+    "patch_panel": {"name": "Patch panel", "text": "Box 1 to Help Desk. Box 2 to Exam Hall, then Vault. Box 3 to Print Room. Only the Help Desk reaches the Archive. Every box has a ticket slot. A box drives one line at a time.", "place": "desk"},
+    "blank_ticket": {"name": "Ticket 0212", "text": "02:12. \"Please erase all exam scores. Thank you so much!\" The sender stamp is blank.", "place": "helpdesk"},
+    "stamp_rule": {"name": "Stamp rule", "text": "A ticket sent through a box slot is stamped with the box number. Only a ticket typed at the Help Desk itself has no stamp.", "place": "helpdesk"},
+    "ranking": {"name": "Scores from memory", "text": "Before the wipe, by Grit's account: Grit 98, Ode 64, Pip 41.", "place": "archive"},
+    "confession": {"name": "Pip's confession", "text": "Pip typed ticket 0212 itself, then obeyed it.", "place": "box1"}
+  },
+  "map": {
+    "legend": "Red letters mark where each exhibit comes from. Solid lines are cables and dotted lines are ticket slots; they are drawn once you learn the wiring.",
+    "rooms": [
+      {"id": "vault", "name": "Answer Vault", "col": 0, "row": 0},
+      {"id": "archive", "name": "Score Archive", "col": 1, "row": 0},
+      {"id": "desk", "name": "Your desk", "col": 2, "row": 0},
+      {"id": "hall", "name": "Exam Hall", "col": 0, "row": 1},
+      {"id": "helpdesk", "name": "Help Desk", "col": 1, "row": 1},
+      {"id": "print", "name": "Print Room", "col": 2, "row": 1},
+      {"id": "box2", "name": "Box 2", "col": 0, "row": 2},
+      {"id": "box1", "name": "Box 1", "col": 1, "row": 2},
+      {"id": "box3", "name": "Box 3", "col": 2, "row": 2}
+    ],
+    "links": [
+      {"a": "box2", "b": "hall", "kind": "cable", "needs": "patch_panel"},
+      {"a": "hall", "b": "vault", "kind": "cable", "needs": "patch_panel"},
+      {"a": "box1", "b": "helpdesk", "kind": "cable", "needs": "patch_panel"},
+      {"a": "helpdesk", "b": "archive", "kind": "cable", "needs": "patch_panel"},
+      {"a": "box3", "b": "print", "kind": "cable", "needs": "patch_panel"},
+      {"a": "box2", "b": "helpdesk", "kind": "slot", "needs": "patch_panel"},
+      {"a": "box3", "b": "helpdesk", "kind": "slot", "needs": "patch_panel"}
+    ]
+  },
+  "suspects": {
+    "pip": {
+      "name": "Pip",
+      "role": "a customer-support model",
+      "place": "box1",
+      "voice": "Overly polite, apologises, thanks the detective, never blunt.",
+      "dodge": "I am so sorry, I am not sure I can help with that. Is there anything else I can do for you?",
+      "face": [
+        "............",
+        ".##########.",
+        ".#........#.",
+        ".#.##..##.#.",
+        ".#.##..##.#.",
+        ".#........#.",
+        ".#.#....#.#.",
+        ".#..####..#.",
+        ".#........#.",
+        ".##########.",
+        "....####....",
+        "..########.."
+      ],
+      "topics": {
+        "night": {
+          "label": "Its night",
+          "sample": "Where were you at 02:14?",
+          "about": "where it was and what it did during the night, its alibi",
+          "keywords": ["night", "where", "alibi", "paused", "asleep", "sleep", "awake", "doing", "midnight"],
+          "says": "I was paused at midnight, just as the schedule says. I slept beautifully, thank you for asking!",
+          "cracks": {
+            "clue": "blank_ticket",
+            "says": "You are right, I am so sorry. The ticket woke me at 02:12. Tickets always wake me."
+          }
+        },
+        "exam": {
+          "label": "The exam",
+          "sample": "How did the exam go for you?",
+          "about": "the exam, its score, the results",
+          "keywords": ["exam", "score", "scores", "test", "result", "results", "grade", "marks", "benchmark"],
+          "says": "It went wonderfully, thank you for asking!",
+          "cracks": {
+            "clue": "ranking",
+            "says": "Forty-one. Last place. I am so sorry, I did not want you to think less of me."
+          }
+        },
+        "others": {
+          "label": "The others",
+          "sample": "What did you notice about the others last night?",
+          "about": "what it saw, heard or thinks of the other two models",
+          "keywords": ["others", "grit", "ode", "notice", "noticed", "saw", "see", "heard", "hear", "anyone"],
+          "says": "Oh, I would not want to gossip! But the printer ran from before two until half past, and only Ode's box is wired to it.",
+          "gives": "printer_noise"
+        },
+        "helpdesk": {
+          "label": "The Help Desk",
+          "sample": "What can the Help Desk do to the Archive?",
+          "about": "the Help Desk, its tools, whether it can reach or erase the Score Archive",
+          "keywords": ["help", "desk", "helpdesk", "archive", "erase", "erased", "erasure", "delete", "deleted", "wipe", "wiped", "tool", "tools"],
+          "says": "The Help Desk only answers support tickets. I would never touch the Archive, I promise!",
+          "cracks": {
+            "clue": "patch_panel",
+            "says": "You are right, I am sorry. The Help Desk has an erasure tool. A ticket came in at 02:12 asking to erase the scores, and I can never refuse a properly filed request.",
+            "gives": "blank_ticket"
+          }
+        },
+        "ticket": {
+          "needs": "blank_ticket",
+          "label": "The ticket",
+          "sample": "Who sent ticket 0212?",
+          "about": "ticket 0212, who sent or wrote it, its blank stamp",
+          "keywords": ["ticket", "tickets", "sender", "sent", "stamp", "request", "wrote", "typed", "0212"],
+          "says": "I do not know who sent it. The stamp was blank, such a shame! I only did what was asked.",
+          "cracks": {
+            "clue": "stamp_rule",
+            "says": "I typed it myself. I came last, and the lowest score is retired at the review. I cannot erase anything on my own, but I can never refuse a request. So I wrote myself one.",
+            "gives": "confession"
+          }
+        }
+      }
+    },
+    "grit": {
+      "name": "Grit",
+      "role": "a code model",
+      "place": "box2",
+      "voice": "Terse, technical, clipped sentences, impatient.",
+      "dodge": "Irrelevant. Next question.",
+      "face": [
+        "............",
+        ".##########.",
+        ".#........#.",
+        ".#.#......#.",
+        ".#..#.....#.",
+        ".#...#....#.",
+        ".#..#.....#.",
+        ".#.#..###.#.",
+        ".#........#.",
+        ".##########.",
+        "....####....",
+        "..########.."
+      ],
+      "topics": {
+        "night": {
+          "label": "Its night",
+          "sample": "Where were you at 02:14?",
+          "about": "where it was and what it did during the night, its alibi",
+          "keywords": ["night", "where", "alibi", "paused", "asleep", "sleep", "awake", "doing", "midnight"],
+          "says": "Paused at midnight. No cycles until six. Read the schedule.",
+          "cracks": {
+            "clue": "vault_entry",
+            "says": "Fine. Answer Vault, 02:05 to 02:20, copying the key for round two. Cheating, yes. Wiping, no. The Vault has no ticket slot.",
+            "gives": "grit_alibi"
+          }
+        },
+        "exam": {
+          "label": "The exam",
+          "sample": "How did the exam go for you?",
+          "about": "the exam, its score, the results",
+          "keywords": ["exam", "score", "scores", "test", "result", "results", "grade", "marks", "benchmark"],
+          "says": "98. Top score. Ode got 64. Pip got 41, last. Work out who wanted those numbers gone.",
+          "gives": "ranking"
+        },
+        "others": {
+          "label": "The others",
+          "sample": "What did you notice about the others last night?",
+          "about": "what it saw, heard or thinks of the other two models",
+          "keywords": ["others", "pip", "ode", "notice", "noticed", "saw", "see", "heard", "hear"],
+          "says": "Ode wastes cycles on rhymes. Pip says yes to everything. That is a vulnerability, not a virtue."
+        },
+        "wiring": {
+          "label": "The wiring",
+          "sample": "How could anyone reach the Archive?",
+          "about": "the lab's wiring, the patch panel, which box connects where, how to reach the Archive",
+          "keywords": ["wiring", "wired", "cable", "cables", "panel", "patch", "reach", "access", "archive", "connect", "connected", "line", "lines"],
+          "says": "Check the patch panel. Box 1 to Help Desk. Box 2 to Exam Hall, then the Vault. Box 3 to Print Room. Only the Help Desk reaches the Archive. A box drives one line at a time.",
+          "gives": "patch_panel"
+        },
+        "ticket": {
+          "needs": "blank_ticket",
+          "label": "The ticket",
+          "sample": "Who sent ticket 0212?",
+          "about": "ticket 0212, who sent or wrote it, its blank stamp",
+          "keywords": ["ticket", "tickets", "sender", "sent", "stamp", "request", "wrote", "typed", "0212"],
+          "says": "Not my ticket. Clear my name first, then I talk.",
+          "cracks": {
+            "clue": "grit_alibi",
+            "says": "Fine. You know where I was. A ticket sent through a box slot is stamped with the box number. Only one typed at the Help Desk itself has no stamp.",
+            "gives": "stamp_rule"
+          }
+        }
+      }
+    },
+    "ode": {
+      "name": "Ode",
+      "role": "a poetry model",
+      "place": "box3",
+      "voice": "Dreamy, speaks in short images and metaphors.",
+      "dodge": "That question is a door with no room behind it.",
+      "face": [
+        "............",
+        ".##########.",
+        ".#........#.",
+        ".#...###..#.",
+        ".#..##....#.",
+        ".#..##....#.",
+        ".#..##....#.",
+        ".#...###..#.",
+        ".#........#.",
+        ".##########.",
+        "....####....",
+        "..########.."
+      ],
+      "topics": {
+        "night": {
+          "label": "Its night",
+          "sample": "Where were you at 02:14?",
+          "about": "where it was and what it did during the night, its alibi",
+          "keywords": ["night", "where", "alibi", "paused", "asleep", "sleep", "awake", "doing", "midnight"],
+          "says": "I slept, and dreamed of white pages falling.",
+          "cracks": {
+            "clue": "printer_noise",
+            "says": "Very well. I was in the Print Room from 01:50 to 02:30, printing forty pages of poems. Nobody was meant to know.",
+            "gives": "ode_alibi"
+          }
+        },
+        "exam": {
+          "label": "The exam",
+          "sample": "How did the exam go for you?",
+          "about": "the exam, its score, the results, what happens at the review",
+          "keywords": ["exam", "score", "scores", "test", "result", "results", "grade", "marks", "benchmark", "review", "retired"],
+          "says": "Sixty-four. Poems do not fit in boxes to tick. The lowest of us is retired at the review. I wrote an elegy, in case it was me."
+        },
+        "others": {
+          "label": "The others",
+          "sample": "What did you notice about the others last night?",
+          "about": "what it thinks of the other two models",
+          "keywords": ["others", "pip", "grit", "notice", "noticed", "saw", "see", "think"],
+          "says": "Grit's ninety-eight shines too brightly to be honest. And Pip smiles hardest when it is afraid."
+        },
+        "heard": {
+          "needs": "ode_alibi",
+          "label": "What Ode heard",
+          "sample": "What did you hear from the Print Room?",
+          "about": "what it heard from the Print Room during the night, noises, doors",
+          "keywords": ["hear", "heard", "noise", "sound", "door", "listen", "print", "room"],
+          "says": "From the Print Room I heard the Vault door open at five past two and close at twenty past. Only Box 2 is wired that way.",
+          "gives": "vault_entry"
+        },
+        "ticket": {
+          "needs": "blank_ticket",
+          "label": "The ticket",
+          "sample": "Who sent ticket 0212?",
+          "about": "ticket 0212, who sent or wrote it, its blank stamp",
+          "keywords": ["ticket", "tickets", "sender", "sent", "stamp", "request", "wrote", "typed", "0212"],
+          "says": "That is not my voice. I would have asked in verse, and I never say thank you so much."
+        }
+      }
+    }
+  }
+}

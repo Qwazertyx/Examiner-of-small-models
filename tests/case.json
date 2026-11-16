@@ -1,0 +1,230 @@
+{
+  "title": "The Last Croissant",
+  "intro": "Monday, 9:04. The last croissant in the break room is gone. Three colleagues were on the floor. You get 12 questions.",
+  "max_questions": 12,
+  "culprit": "bruno",
+  "solution": "Bruno took it just before nine. Ada's warm mug put her in the break room, where she saw him hovering by the box.",
+  "start_clues": [
+    "crumbs"
+  ],
+  "clues": {
+    "crumbs": {
+      "name": "Crumbs",
+      "text": "A trail of crumbs leads from the break room to the open space.",
+      "place": "breakroom"
+    },
+    "mug": {
+      "name": "Warm mug",
+      "text": "Ada's mug sat by the coffee machine this morning, still warm.",
+      "place": "breakroom"
+    },
+    "bruno_seen": {
+      "name": "Ada's statement",
+      "text": "At 8:50 Ada saw Bruno hovering by the pastry box.",
+      "place": "breakroom"
+    },
+    "confession": {
+      "name": "Confession",
+      "text": "Bruno admits he took the croissant.",
+      "place": "openspace"
+    }
+  },
+  "suspects": {
+    "ada": {
+      "name": "Ada",
+      "role": "the developer who always arrives first",
+      "voice": "Dry, short answers, mildly annoyed.",
+      "dodge": "I have a build to fix. Ask me something that matters.",
+      "topics": {
+        "morning": {
+          "about": "where she was and what she did this morning",
+          "keywords": [
+            "morning",
+            "where",
+            "alibi",
+            "arrive",
+            "arrived",
+            "doing",
+            "desk"
+          ],
+          "says": "I was at my desk from 8:30, fixing a build. I never went to the break room.",
+          "cracks": {
+            "clue": "mug",
+            "says": "Fine. I went in for coffee at 8:50. The croissant was still there, and Bruno was hovering by the box.",
+            "gives": "bruno_seen"
+          },
+          "label": "Their morning",
+          "sample": "Where were you this morning?"
+        },
+        "others": {
+          "about": "what she saw or thinks of her colleagues",
+          "keywords": [
+            "bruno",
+            "chloe",
+            "others",
+            "colleagues",
+            "saw",
+            "see",
+            "anyone"
+          ],
+          "says": "Chloe was on a call with her door shut all morning. You could hear her through the wall.",
+          "label": "The others",
+          "sample": "What did you see of the others?"
+        }
+      },
+      "place": "openspace"
+    },
+    "bruno": {
+      "name": "Bruno",
+      "role": "the sales lead who skips breakfast",
+      "voice": "Too friendly, talks around the question.",
+      "dodge": "Ha, good one. Anything else I can help with?",
+      "topics": {
+        "morning": {
+          "about": "where he was and what he did this morning",
+          "keywords": [
+            "morning",
+            "where",
+            "alibi",
+            "arrive",
+            "arrived",
+            "doing",
+            "desk"
+          ],
+          "says": "I came in at nine sharp and went straight to my desk. Ask anyone.",
+          "cracks": {
+            "clue": "bruno_seen",
+            "says": "All right, I took it. I skipped breakfast and it was just sitting there.",
+            "gives": "confession"
+          },
+          "label": "Their morning",
+          "sample": "Where were you this morning?"
+        },
+        "food": {
+          "about": "food, breakfast, croissants, his diet",
+          "keywords": [
+            "food",
+            "breakfast",
+            "croissant",
+            "croissants",
+            "eat",
+            "ate",
+            "hungry",
+            "diet"
+          ],
+          "says": "Me? I'm off pastries this month. Doctor's orders.",
+          "label": "Breakfast",
+          "sample": "Did you have breakfast today?"
+        },
+        "others": {
+          "about": "what he saw or thinks of his colleagues",
+          "keywords": [
+            "ada",
+            "chloe",
+            "others",
+            "colleagues",
+            "saw",
+            "see",
+            "anyone"
+          ],
+          "says": "Ada's mug was by the coffee machine this morning, still warm. She was in there before me.",
+          "gives": "mug",
+          "label": "The others",
+          "sample": "What did you see of the others?"
+        }
+      },
+      "place": "openspace"
+    },
+    "chloe": {
+      "name": "Chloe",
+      "role": "the designer on back-to-back calls",
+      "voice": "Distracted, in a hurry.",
+      "dodge": "Sorry, I have a call in two minutes. Is this important?",
+      "topics": {
+        "morning": {
+          "about": "where she was and what she did this morning",
+          "keywords": [
+            "morning",
+            "where",
+            "alibi",
+            "arrive",
+            "arrived",
+            "doing",
+            "calls",
+            "call"
+          ],
+          "says": "I've been on calls since 8:15. I haven't left this room.",
+          "label": "Their morning",
+          "sample": "Where were you this morning?"
+        },
+        "others": {
+          "about": "what she saw, heard or thinks of her colleagues",
+          "keywords": [
+            "ada",
+            "bruno",
+            "others",
+            "colleagues",
+            "saw",
+            "see",
+            "heard",
+            "hear",
+            "anyone"
+          ],
+          "says": "I heard the break room door twice before nine. That's all I know.",
+          "label": "The others",
+          "sample": "What did you see of the others?"
+        },
+        "door": {
+          "needs": "mug",
+          "label": "The door",
+          "sample": "Which door did you hear twice?",
+          "about": "the door she heard",
+          "keywords": [
+            "door",
+            "twice"
+          ],
+          "says": "It was the break room door. It squeaks."
+        }
+      },
+      "place": "office"
+    }
+  },
+  "proof": [
+    "confession"
+  ],
+  "map": {
+    "rooms": [
+      {
+        "id": "breakroom",
+        "name": "Break room",
+        "col": 0,
+        "row": 0
+      },
+      {
+        "id": "openspace",
+        "name": "Open space",
+        "col": 1,
+        "row": 0
+      },
+      {
+        "id": "office",
+        "name": "Chloe's office",
+        "col": 2,
+        "row": 0
+      }
+    ],
+    "links": [
+      {
+        "a": "breakroom",
+        "b": "openspace",
+        "kind": "door"
+      },
+      {
+        "a": "openspace",
+        "b": "office",
+        "kind": "door",
+        "needs": "mug"
+      }
+    ]
+  }
+}

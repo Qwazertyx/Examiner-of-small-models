@@ -1,0 +1,17 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "ai-color-palette",
+        "value": "*",
+        "files": [
+          "design/directions.html"
+        ],
+        "createdAt": "2026-11-16T19:08:26.266Z",
+        "reason": "Claude decided: direction D of this comparison sheet reproduces the fixed 8-colour teletext palette (cyan, yellow, green on black) on purpose; the sheet is a design exploration outside public/ and is not deployed"
+      }
+    ]
+  }
+}

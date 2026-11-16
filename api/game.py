@@ -11,11 +11,14 @@ from game import phone, rules  # noqa: E402
 from game.store import StoreDown, make_store  # noqa: E402
 
 MAX_BODY = 4096
-REQUESTS_PER_MINUTE = 90  # per address, on actions that touch the store; a real game needs about 30
+# Per address, on actions that touch the store. A phone and a computer on the same Wi-Fi share one
+# address, and while a reply streams they send about 2 requests a second between them.
+REQUESTS_PER_MINUTE = 240
 STORE = make_store()
 PHONE_ACTIONS = {
     "phone_status": phone.status, "phone_bye": phone.bye,
     "phone_hello": phone.hello, "phone_next": phone.next_job, "phone_done": phone.done,
+    "phone_part": phone.part, "phone_peek": phone.peek,
 }
 
 

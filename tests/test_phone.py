@@ -653,6 +653,113 @@ class ModelRecursionTest(unittest.TestCase):
             rules.model_topic(topics, "q", lambda *a: "[" * 100000)
 
 
+PART = "A" * 24
+PCODE = PART + phone._sign(PART)
+J1, J2 = "1" * 32, "2" * 32
+
+
+class PartPeekTest(unittest.TestCase):
+    def setUp(self):
+        self.s = Memory()
+
+    def req(self, **k):
+        return {"code": PCODE, **k}
+
+    def peek(self):
+        return phone.peek(self.s, {"code": PCODE})
+
+    def test_current_job_stored_other_ignored(self):
+        self.assertEqual(self.peek(), {"text": None})
+        self.s.set("cur:" + PCODE, J1, 60)
+        self.assertEqual(phone.part(self.s, self.req(id=J1, text="Hel")), {"ok": True})
+        self.assertEqual(self.peek(), {"text": "Hel"})
+        self.assertEqual(phone.part(self.s, self.req(id=J2, text="other")), {"ok": True})
+        self.assertEqual(self.peek(), {"text": "Hel"})
+
+    def test_other_job_without_previous_text_is_none(self):
+        self.s.set("cur:" + PCODE, J1, 60)
+        phone.part(self.s, self.req(id=J2, text="x"))
+        self.assertEqual(self.peek(), {"text": None})
+
+    def test_truncates(self):
+        self.s.set("cur:" + PCODE, J1, 60)
+        phone.part(self.s, self.req(id=J1, text="x" * (phone.MAX_PART + 50)))
+        self.assertEqual(self.peek(), {"text": "x" * phone.MAX_PART})
+
+    def test_part_validation(self):
+        bad = [self.req(id="A" * 32, text="x"), self.req(id="1" * 31, text="x"), self.req(id=5, text="x"),
+               self.req(text="x"), self.req(id=J1, text=5), self.req(id=J1), {"code": "bad", "id": J1, "text": "x"},
+               {"id": J1, "text": "x"}]
+        for r in bad:
+            with self.subTest(r=r), self.assertRaises(rules.BadRequest):
+                phone.part(self.s, r)
+
+    def test_peek_invalid_code(self):
+        for c in ("bad", None, PART + "0" * 16):
+            with self.subTest(c=c), self.assertRaises(rules.BadRequest):
+                phone.peek(self.s, {"code": c})
+
+    def run_model(self, schema, act):
+        """Run one model call while `act(job)` plays the phone; returns the model's result."""
+        self.s.set("pair:" + PCODE, json.dumps({"ends": time.time() + 99}), 99)
+        self.s.set("alive:" + PCODE, "1", 30)
+
+        def phone_side():
+            act(phone.next_job(self.s, {"code": PCODE})["job"])
+
+        with patch.object(phone, "PHONE_WAIT", 2), patch.object(phone, "QUESTION_BUDGET", 5):
+            t = threading.Thread(target=phone_side, daemon=True)
+            t.start()
+            model = phone.phone_model(self.s, PCODE)
+            self.addCleanup(model.release)
+            out = model("s", "u", schema, 9)
+            t.join(2)
+        return out
+
+    def test_model_schema_job_leaves_cur_and_part(self):
+        self.s.set("part:" + PCODE, "old", 60)
+        seen = []
+
+        def act(job):
+            seen.extend([self.s.get("cur:" + PCODE), self.peek()["text"]])
+            phone.done(self.s, self.req(id=job["id"], text="{}"))
+
+        self.assertEqual(self.run_model({"type": "object"}, act), "{}")
+        self.assertEqual(seen, [None, "old"])
+
+    def test_model_reply_job_sets_cur_clears_part_end_to_end(self):
+        self.s.set("part:" + PCODE, "old question", 60)
+        seen = []
+
+        def act(job):
+            seen.append(self.s.get("cur:" + PCODE) == job["id"])
+            seen.append(self.peek()["text"])
+            phone.part(self.s, self.req(id=job["id"], text="He"))
+            seen.append(self.peek()["text"])
+            phone.part(self.s, self.req(id=job["id"], text="Hello wor"))
+            seen.append(self.peek()["text"])
+            phone.done(self.s, self.req(id=job["id"], text="Hello world"))
+
+        self.assertEqual(self.run_model(None, act), "Hello world")
+        self.assertEqual(seen, [True, None, "He", "Hello wor"])
+
+    def test_stale_part_after_new_reply_job(self):
+        self.s.set("alive:" + PCODE, "1", 30)
+        ids = []
+        for _ in range(2):
+            with patch.object(phone, "QUESTION_BUDGET", 0.3), patch.object(phone, "MIN_LEFT", 0.05):
+                model = phone.phone_model(self.s, PCODE)
+                with self.assertRaises(rules.ModelDown):
+                    model("s", "u", None, 5)
+                model.release()
+            ids.append(json.loads(self.s.pop("jobs:" + PCODE, 0))["id"])
+        old, new = ids
+        self.assertNotEqual(old, new)
+        phone.part(self.s, self.req(id=new, text="new text"))
+        phone.part(self.s, self.req(id=old, text="stale"))
+        self.assertEqual(self.peek(), {"text": "new text"})
+
+
 class FakeStoreDown:
     def __getattr__(self, name):
         def f(*a, **k):
@@ -804,6 +911,21 @@ class HttpPhoneTest(unittest.TestCase):
     def test_code_not_in_public_view(self):
         code = self.pair()
         self.assertNotIn(code, json.dumps(self.call("GET", "/api/game")[1]))
+
+    def test_part_peek_http(self):
+        self.s.set("cur:" + PCODE, J1, 60)
+        self.assertEqual(self.post({"action": "phone_part", "code": PCODE, "id": J1, "text": "hi"}), (200, {"ok": True}))
+        self.assertEqual(self.post({"action": "phone_peek", "code": PCODE}), (200, {"text": "hi"}))
+        for body in ({"action": "phone_part", "id": J1, "text": "x"}, {"action": "phone_peek"}):
+            with self.subTest(body=body):
+                self.assertEqual(self.post({**body, "code": "x" * 20})[0], 400)
+
+    def test_part_peek_count_against_limit(self):
+        with patch.object(api.game, "REQUESTS_PER_MINUTE", 2):
+            self.assertEqual(self.post({"action": "phone_part", "code": PCODE, "id": J1, "text": "x"})[0], 200)
+            self.assertEqual(self.post({"action": "phone_peek", "code": PCODE})[0], 200)
+            self.assertEqual(self.post({"action": "phone_peek", "code": PCODE})[0], 429)
+            self.assertEqual(self.post({"action": "phone_part", "code": PCODE, "id": J1, "text": "x"})[0], 429)
 
 
 if __name__ == "__main__":

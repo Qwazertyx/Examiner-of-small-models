@@ -23,6 +23,7 @@ QUESTION_BUDGET = 45  # seconds for all model calls of one question; the functio
 MIN_LEFT = 4          # a job with less time left than this is dropped: the phone could not finish it
 PAIRS_PER_HOUR = 10   # per player address; one sitting needs one
 MAX_TEXT = 1500
+MAX_PART = 300        # a reply is cut to this length by the rules anyway
 
 CODE = re.compile(r"[A-Za-z0-9_-]{24}[0-9a-f]{16}")
 JOB_ID = re.compile(r"[0-9a-f]{32}")
@@ -146,6 +147,23 @@ def done(store, req):
     return {"ok": True}
 
 
+def part(store, req):
+    """Phone side: the reply written so far, so the computer can show it while the phone types."""
+    code = _code(req)
+    job, text = req.get("id"), req.get("text")
+    if not isinstance(job, str) or not JOB_ID.fullmatch(job) or not isinstance(text, str):
+        raise BadRequest("Invalid answer.")
+    # Only the reply the computer is waiting for right now; a stale job cannot overwrite it.
+    if store.get("cur:" + code) == job:
+        store.set("part:" + code, text[:MAX_PART], JOB_TTL)
+    return {"ok": True}
+
+
+def peek(store, req):
+    """Computer side: the reply the phone has written so far, or None."""
+    return {"text": store.get("part:" + _code(req))}
+
+
 def phone_model(store, code):
     """Return model(system, user, schema, max_tokens) -> str running on the paired phone.
 
@@ -169,6 +187,9 @@ def phone_model(store, code):
             if left < MIN_LEFT:
                 raise ModelDown("slow")
             job = secrets.token_hex(16)
+            if schema is None:  # a reply: the one the computer shows while it is being typed
+                store.set("cur:" + code, job, JOB_TTL)
+                store.delete("part:" + code)
             store.push("jobs:" + code, json.dumps({"id": job, "system": system, "user": user, "schema": schema,
                                                    "max_tokens": max_tokens, "deadline": deadline}), JOB_TTL)
             text = store.pop(f"res:{code}:{job}", left, every=0.5)

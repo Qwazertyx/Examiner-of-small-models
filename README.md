@@ -1,7 +1,7 @@
 # Examiner of Small Models
 
 An interrogation game. You question three suspects, collect evidence, confront them
-with what you found, and accuse one. The suspects can be voiced by a one-billion-parameter
+with what you found, and accuse one. The suspects can be voiced by a small
 language model running in the browser of your own phone.
 
 ![The case file, mid-game](design/screenshot.png)
@@ -19,8 +19,10 @@ Work in progress: the in-browser model has not run on a real phone yet.
 
 - **Written lines**: starts at once, the suspects answer with lines written for the case.
 - **Lend your phone**: the computer shows a QR code. The phone opens `phone.html`, downloads
-  Llama 3.2 1B (about 700 MB the first time, then cached) and runs it on its GPU with
-  [WebLLM](https://github.com/mlc-ai/web-llm). It needs WebGPU: Chrome on a recent Android
+  a model and runs it on its GPU with [WebLLM](https://github.com/mlc-ai/web-llm): Qwen 2.5 0.5B
+  by default (290 MB, the fast voice) or Llama 3.2 1B (705 MB, richer and about twice as slow).
+  Downloads are cached for the next game. The reply streams to the computer while the phone
+  writes it. It needs WebGPU: Chrome on a recent Android
   phone, or Safari on iOS 26. If the phone sleeps or is too slow, that answer falls back to
   the written line and the game goes on.
 
@@ -112,4 +114,4 @@ the proof can be obtained.
 
 Typeface: Special Elite by Astigmatic, Apache License 2.0.
 QR codes: qrcode-generator 1.4.4 by Kazuhiko Arase, MIT License (`public/vendor/`).
-In-browser model: WebLLM by MLC, Apache License 2.0; Llama 3.2 1B, Llama 3.2 Community License.
+In-browser models: WebLLM by MLC, Apache License 2.0; Qwen 2.5 0.5B Instruct, Apache License 2.0; Llama 3.2 1B, Llama 3.2 Community License.

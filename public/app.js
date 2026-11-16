@@ -4,6 +4,7 @@ const $ = (id) => document.getElementById(id);
 const SVG = "http://www.w3.org/2000/svg";
 const PAIR_POLL = 2500;  // ms between phone checks while pairing
 const GAME_POLL = 10000; // ms between phone checks during the game
+const PEEK_EVERY = 800;  // ms between looks at the reply the phone is typing
 
 let game;      // public case data from the server
 let suspect;   // suspect currently being questioned
@@ -273,10 +274,31 @@ $("ask").addEventListener("submit", async (event) => {
   refresh();
   $("status").textContent = asked.name + (mode === "phone"
     ? " is thinking. Your phone can take a few seconds." : " is thinking.");
+  // In phone mode the reply is shown while the phone types it, then replaced by the final text.
+  let typing, peekTimer;
+  const peek = async () => {
+    try {
+      const { text } = await api({ action: "phone_peek", code });
+      if (text && typing) typing.lastChild.textContent = text + "…";
+    } catch {
+      // only a preview; the final answer still arrives
+    }
+    if (typing) peekTimer = setTimeout(peek, PEEK_EVERY);
+  };
+  if (mode === "phone") {
+    typing = record("q typing", "Q, to " + asked.name + ".", question);
+    typing = record("a typing", "A.", "…");
+    peekTimer = setTimeout(peek, PEEK_EVERY);
+  }
   try {
-    const turn = await api({
-      action: "ask", suspect: asked.id, question, show: shown || null, state, mode, code,
-    });
+    let turn;
+    try {
+      turn = await api({ action: "ask", suspect: asked.id, question, show: shown || null, state, mode, code });
+    } finally {
+      clearTimeout(peekTimer);
+      typing = null;
+      for (const line of $("log").querySelectorAll(".typing")) line.remove();
+    }
     state = turn.state;
     leads = turn.leads;
     plan = turn.map;

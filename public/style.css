@@ -191,6 +191,10 @@ header {
   text-underline-offset: 0.2em;
 }
 
+#log .typing {
+  color: var(--graphite);
+}
+
 #log .a small {
   display: block;
 }

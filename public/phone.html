@@ -18,14 +18,17 @@
     <header>
       <h1>Lending this phone to the case</h1>
       <p id="intro">The suspects need a voice. This page downloads a small language model
-        (about 700 MB, so Wi-Fi is better) and runs it in this browser, answering the
+        (300 to 700 MB the first time, so Wi-Fi is better) and runs it in this browser, answering the
         questions asked on the computer. Nothing is installed. Keep this page open and on
         screen for the whole game.</p>
     </header>
 
     <section id="setup" class="sheet" hidden>
-      <p id="cache" class="hint"></p>
-      <button id="start" type="button">Start</button>
+      <p>Pick a voice for the suspects.</p>
+      <button id="start-fast" type="button">Fast voice</button>
+      <p id="fast-note" class="hint"></p>
+      <button id="start-rich" type="button" class="quiet">Richer voice, slower</button>
+      <p id="rich-note" class="hint"></p>
     </section>
 
     <section id="loading" class="sheet" hidden aria-live="polite">

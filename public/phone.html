@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Lending this phone to the case</title>
+  <meta name="description" content="Run the suspects' voice in this phone's browser for one game of Examiner of Small Models.">
+  <meta name="robots" content="noindex">
+  <link rel="preload" href="fonts/special-elite.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="phone.css">
+  <script type="module" src="phone.js"></script>
+</head>
+<body>
+  <main class="folder">
+    <p class="tab">Examiner of Small Models</p>
+
+    <header>
+      <h1>Lending this phone to the case</h1>
+      <p id="intro">The suspects need a voice. This page downloads a small language model
+        (about 700 MB, so Wi-Fi is better) and runs it in this browser, answering the
+        questions asked on the computer. Nothing is installed. Keep this page open and on
+        screen for the whole game.</p>
+    </header>
+
+    <section id="setup" class="sheet" hidden>
+      <p id="cache" class="hint"></p>
+      <button id="start" type="button">Start</button>
+    </section>
+
+    <section id="loading" class="sheet" hidden aria-live="polite">
+      <p id="loading-text">Getting ready…</p>
+      <progress id="bar" max="1"></progress>
+      <p id="percent" class="hint"></p>
+    </section>
+
+    <section id="ready" class="sheet" hidden>
+      <p class="stamp">On duty</p>
+      <p class="state">Ready. Go back to the computer and play.</p>
+      <p id="live" role="status">Waiting for a question…</p>
+      <p id="count" class="hint">0 questions answered</p>
+      <p id="screen" class="hint" hidden>Keep the screen on: this phone cannot keep it awake by itself.</p>
+    </section>
+
+    <section id="error" class="sheet" hidden role="alert">
+      <p class="stamp">Stopped</p>
+      <p id="error-text"></p>
+      <p id="error-help" class="hint"></p>
+    </section>
+  </main>
+</body>
+</html>

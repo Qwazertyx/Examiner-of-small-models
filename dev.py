@@ -1,7 +1,7 @@
-"""Local dev server: `SCRIPTED=1 python3 dev.py`, then open http://127.0.0.1:8000
+"""Local dev server: `python3 dev.py`, then open http://127.0.0.1:8000
 
-Serves public/ and routes /api/* to the same code Vercel runs.
-SCRIPTED=1 plays with scripted lines; without it the game waits for PHONE_URL and PHONE_TOKEN.
+Serves public/ and routes /api/* to the same code Vercel runs. Without Upstash
+variables the phone pairing lives in memory, which is enough on one machine.
 """
 from functools import partial
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer

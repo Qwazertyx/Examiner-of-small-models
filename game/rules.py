@@ -149,8 +149,8 @@ def model_reply(suspect, question, fact, model):
     return clean(text)[:MAX_REPLY]
 
 
-def ask(sc, req, model=None, fallback=True):
-    """Answer one question. Without fallback, a silent model raises ModelDown and nothing is consumed."""
+def ask(sc, req, model=None):
+    """Answer one question. A silent or failing model falls back to the scripted line."""
     suspect_id, question, shown, state = parse_ask(sc, req)
     if state["asked"] >= sc["max_questions"]:
         raise BadRequest("No questions left. Make your accusation.")
@@ -162,8 +162,6 @@ def ask(sc, req, model=None, fallback=True):
             raise ModelDown("no model configured")
         topic_id = model_topic(topics, question, model)
     except ModelDown:
-        if not fallback:
-            raise
         model, topic_id = None, keyword_topic(topics, question)
 
     topic = topics.get(topic_id)
@@ -181,8 +179,6 @@ def ask(sc, req, model=None, fallback=True):
         try:
             reply = model_reply(suspect, question, fact, model)
         except ModelDown:
-            if not fallback:
-                raise
             model = None
 
     found = gives is not None and gives not in state["clues"]
@@ -215,7 +211,7 @@ def accuse(sc, req):
     }
 
 
-def handle(method, raw, model=None, sc=SCENARIO, fallback=True):
+def handle(method, raw, model=None, sc=SCENARIO):
     """Entry point shared by the Vercel function and the dev server: (status, payload)."""
     if method == "GET":
         return 200, public_view(sc)
@@ -224,7 +220,7 @@ def handle(method, raw, model=None, sc=SCENARIO, fallback=True):
         if not isinstance(req, dict):
             raise BadRequest("Expected a JSON object.")
         if req.get("action") == "ask":
-            return 200, ask(sc, req, model, fallback)
+            return 200, ask(sc, req, model)
         if req.get("action") == "accuse":
             return 200, accuse(sc, req)
         raise BadRequest("Unknown action.")
@@ -232,9 +228,6 @@ def handle(method, raw, model=None, sc=SCENARIO, fallback=True):
         return 400, {"error": "Invalid JSON."}
     except BadRequest as e:
         return 400, {"error": str(e)}
-    except ModelDown:
-        # The question was not counted: the player asks again once the phone is back.
-        return 503, {"error": "The phone did not answer. Your question was not counted."}
 
 
 def check_scenario(sc):

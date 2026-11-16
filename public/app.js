@@ -2,7 +2,8 @@
 
 const $ = (id) => document.getElementById(id);
 const SVG = "http://www.w3.org/2000/svg";
-const POLL = 6000; // ms between checks while waiting for the phone
+const PAIR_POLL = 2500;  // ms between phone checks while pairing
+const GAME_POLL = 10000; // ms between phone checks during the game
 
 let game;      // public case data from the server
 let suspect;   // suspect currently being questioned
@@ -11,9 +12,10 @@ let leads;     // subjects each suspect can be asked about, given the clues held
 let plan;      // floor plan: rooms, and the links known so far
 const clues = new Map(); // in the order found; the position gives the exhibit letter
 
-let busy = false;     // a question is on its way
-let waiting = false;  // the phone that plays the suspects is not connected
-let over = false;     // an accusation was made
+let mode = null;  // "scripted" or "phone", chosen on the start screen
+let code = null;  // pairing code shared with the lending phone
+let busy = false; // a question is on its way
+let over = false; // an accusation was made
 let remaining = 0;
 let pollTimer;
 
@@ -45,34 +47,114 @@ async function api(body, query = "") {
     });
     data = await res.json();
   } catch {
-    throw new Error("Could not reach the game server. Check your connection and ask again.");
+    throw new Error("Could not reach the game server. Check your connection and try again.");
   }
-  if (!res.ok) {
-    const error = new Error(data.error || "The game server refused the request.");
-    error.status = res.status;
-    throw error;
-  }
+  if (!res.ok) throw new Error(data.error || "The game server refused the request.");
   return data;
 }
 
-// The one place that decides whether the player can ask.
-function refresh() {
-  const locked = busy || waiting || over || remaining === 0;
-  for (const field of $("ask").elements) field.disabled = locked;
-  $("waiting").hidden = !waiting || over;
+// ---- Start screen and the lending phone ----
+
+const PHONE_STATES = {
+  waiting: "Waiting for your phone.",
+  loading: "Your phone is downloading the model.",
+  ready: "Your phone is ready.",
+  asleep: "Your phone stopped answering. Open the phone page again and keep its screen on.",
+  failed: "Your phone cannot run the model.",
+};
+
+function drawQr(text) {
+  const qr = qrcode(0, "M");
+  qr.addData(text);
+  qr.make();
+  const n = qr.getModuleCount();
+  const box = $("qr");
+  box.setAttribute("viewBox", `-4 -4 ${n + 8} ${n + 8}`);
+  box.replaceChildren(svg("rect", { x: -4, y: -4, width: n + 8, height: n + 8, class: "qr-paper" }));
+  for (let r = 0; r < n; r++) {
+    for (let c = 0; c < n; c++) {
+      if (qr.isDark(r, c)) box.append(svg("rect", { x: c, y: r, width: 1, height: 1 }));
+    }
+  }
 }
 
 async function checkPhone() {
   clearTimeout(pollTimer);
-  if (!document.hidden) {
-    try {
-      waiting = (await api(null, "?status")).phone === "waiting";
-    } catch {
-      waiting = true;
-    }
-    refresh();
+  if (over || mode !== "phone") return;
+  let info;
+  try {
+    info = await api(null, "?phone=" + encodeURIComponent(code));
+  } catch (error) {
+    info = { status: "waiting", detail: error.message };
   }
-  if (waiting && !over) pollTimer = setTimeout(checkPhone, POLL);
+  const line = PHONE_STATES[info.status] || PHONE_STATES.waiting;
+  const detail = info.status === "failed" && info.detail ? " " + info.detail : "";
+  if (!$("game").hidden) {
+    $("voice").textContent = info.status === "ready"
+      ? "Voiced by your phone" + (info.model ? ", " + info.model : "") + "."
+      : line + " Until then the suspects use written lines.";
+  } else {
+    $("phone-state").textContent = line + detail;
+    const loading = info.status === "loading";
+    $("phone-progress").hidden = !loading;
+    if (loading) {
+      $("phone-progress").value = info.progress || 0;
+      $("phone-state").textContent = line + " " + Math.round((info.progress || 0) * 100) + "%.";
+    }
+    if (info.status === "ready") begin();
+  }
+  if (!document.hidden) pollTimer = setTimeout(checkPhone, $("game").hidden ? PAIR_POLL : GAME_POLL);
+}
+
+$("play-written").addEventListener("click", () => {
+  mode = "scripted";
+  begin();
+});
+
+$("play-phone").addEventListener("click", async () => {
+  $("start-error").textContent = "";
+  try {
+    code = (await api({ action: "pair" })).code;
+  } catch (error) {
+    $("start-error").textContent = error.message;
+    return;
+  }
+  mode = "phone";
+  // The code travels in the fragment, which browsers never send to a server or a referrer.
+  const url = location.origin + "/phone.html#" + code;
+  drawQr(url);
+  $("phone-link").href = url;
+  $("phone-link").textContent = url;
+  $("play-written").disabled = true;
+  $("play-phone").disabled = true;
+  $("pairing").hidden = false;
+  checkPhone();
+});
+
+$("give-up").addEventListener("click", () => {
+  clearTimeout(pollTimer);
+  mode = "scripted";
+  begin();
+});
+
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden && mode === "phone") checkPhone();
+});
+
+function begin() {
+  $("start").hidden = true;
+  $("game").hidden = false;
+  $("voice").textContent = mode === "phone" ? "Voiced by your phone." : "Written lines.";
+  pick(suspect || game.suspects[0]);
+  $("question").focus();
+}
+
+// ---- The case ----
+
+// The one place that decides whether the player can ask.
+function refresh() {
+  const locked = busy || over || remaining === 0;
+  for (const field of $("ask").elements) field.disabled = locked;
 }
 
 function drawFace(rows) {
@@ -168,21 +250,28 @@ function showRemaining(left) {
 $("ask").addEventListener("submit", async (event) => {
   event.preventDefault();
   const question = $("question").value.trim();
-  if (!question || busy || waiting || over || remaining === 0) return;
+  if (!question || busy || over || remaining === 0) return;
   const asked = suspect;
   const shown = $("show").value;
   busy = true;
   refresh();
-  $("status").textContent = asked.name + " is thinking. The phone can take a few seconds.";
+  $("status").textContent = asked.name + (mode === "phone"
+    ? " is thinking. Your phone can take a few seconds." : " is thinking.");
   try {
-    const turn = await api({ action: "ask", suspect: asked.id, question, show: shown || null, state });
+    const turn = await api({
+      action: "ask", suspect: asked.id, question, show: shown || null, state, mode, code,
+    });
     state = turn.state;
     leads = turn.leads;
     plan = turn.map;
     record("q", "Q, to " + asked.name + (shown ? ", showing exhibit " + letter(shown) : "") + ".", question);
     const answer = record("a", "A.", turn.reply);
     if (turn.cracked) answer.append(" ", el("span", "Statement changed", "stamp new"));
-    answer.append(el("small", turn.source === "phone" ? "Answered by the phone." : "Scripted answer."));
+    if (mode === "phone") {
+      answer.append(el("small", turn.source === "phone"
+        ? "Answered by your phone." : "Written line: your phone did not answer in time."));
+      if (turn.source !== "phone") checkPhone();
+    }
     if (turn.note) {
       $("notes-empty").hidden = true;
       $("notes").append(el("li", asked.name + ": " + turn.note));
@@ -201,8 +290,6 @@ $("ask").addEventListener("submit", async (event) => {
   } catch (error) {
     busy = false;
     $("status").textContent = error.message;
-    // 503: the phone went silent. The question stays in the box for when it is back.
-    if (error.status === 503) await checkPhone();
     refresh();
   }
 });
@@ -235,19 +322,13 @@ $("accuse").addEventListener("click", async () => {
 
 $("again").addEventListener("click", () => location.reload());
 
-// A page left in a background tab stops pinging; it catches up when it is shown again.
-document.addEventListener("visibilitychange", () => {
-  if (!document.hidden && waiting && !over) checkPhone();
-});
-
 (async () => {
   try {
     game = await api();
   } catch (error) {
     $("title").textContent = "The case could not be opened";
     $("intro").textContent = error.message;
-    refresh();
-    $("accuse").disabled = true;
+    $("start").hidden = true;
     return;
   }
   leads = game.leads;
@@ -272,6 +353,6 @@ document.addEventListener("visibilitychange", () => {
     $("suspects").append(button);
   }
   showRemaining(game.max_questions);
-  pick(game.suspects[0]);
-  checkPhone();
+  $("play-written").disabled = false;
+  $("play-phone").disabled = false;
 })();

@@ -1,18 +1,14 @@
 import copy
-import http.server
 import json
 import os
 import sys
-import threading
 import unittest
 from pathlib import Path
-from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
 from game import rules  # noqa: E402
-from game.model import phone_model  # noqa: E402
 
 SC = json.loads((Path(__file__).parent / "case.json").read_text(encoding="utf-8"))
 MUG_FACT = SC["suspects"]["bruno"]["topics"]["others"]["says"]
@@ -225,88 +221,6 @@ class CheckScenario(unittest.TestCase):
             f(sc)
             with self.subTest(f.__name__), self.assertRaises(AssertionError):
                 rules.check_scenario(sc)
-
-
-class Stub(http.server.BaseHTTPRequestHandler):
-    def do_POST(self):
-        srv = self.server
-        n = int(self.headers.get("Content-Length", 0))
-        srv.seen.append((dict(self.headers), self.rfile.read(n)))
-        self.send_response(srv.status)
-        for k, v in srv.extra.items():
-            self.send_header(k, v)
-        self.send_header("Content-Length", str(len(srv.body)))
-        self.end_headers()
-        self.wfile.write(srv.body)
-
-    def log_message(self, *a):
-        pass
-
-
-def stub(status=200, body=b'{"text": "hi"}', **extra):
-    srv = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Stub)
-    srv.status, srv.body, srv.extra, srv.seen = status, body, extra, []
-    threading.Thread(target=srv.serve_forever, daemon=True).start()
-    return srv
-
-
-def make_model(url=None, token=None, ip="203.0.113.7"):
-    env = {k: v for k, v in (("PHONE_URL", url), ("PHONE_TOKEN", token)) if v is not None}
-    with patch.dict(os.environ, env):
-        for k in ("PHONE_URL", "PHONE_TOKEN"):
-            if k not in env:
-                os.environ.pop(k, None)
-        return phone_model(ip)
-
-
-class PhoneModel(unittest.TestCase):
-    def setUp(self):
-        self.servers = []
-
-    def tearDown(self):
-        for s in self.servers:
-            s.shutdown()
-            s.server_close()
-
-    def stub(self, *a, **kw):
-        s = stub(*a, **kw)
-        self.servers.append(s)
-        return s
-
-    def url(self, s):
-        return f"http://127.0.0.1:{s.server_address[1]}"
-
-    def test_configuration(self):
-        self.assertIsNone(make_model(token="t"))
-        self.assertIsNone(make_model(url="https://example.com"))
-        self.assertIsNone(make_model(url="http://example.com", token="t"))
-        self.assertTrue(callable(make_model("https://example.com", "t")))
-        self.assertTrue(callable(make_model("http://127.0.0.1:1234", "t")))
-
-    def test_call(self):
-        s = self.stub()
-        m = make_model(self.url(s), "secret-token", ip="203.0.113.7")
-        self.assertEqual(m("sys", "usr", None, 20), "hi")
-        headers, body = s.seen[0]
-        h = {k.lower(): v for k, v in headers.items()}
-        self.assertEqual(h["authorization"], "Bearer secret-token")
-        self.assertEqual(h["content-type"], "application/json")
-        self.assertRegex(h["x-client"], r"^[0-9a-f]{16}$")
-        self.assertNotIn("203.0.113.7", h["x-client"])
-        self.assertEqual(json.loads(body)["user"], "usr")
-
-    def test_failures(self):
-        for name, s in (("503", self.stub(503, b'{"error": "busy"}')),
-                        ("not json", self.stub(200, b"<html>"))):
-            with self.subTest(name), self.assertRaises(rules.ModelDown):
-                make_model(self.url(s), "t")("a", "b", None, 5)
-
-    def test_redirect_not_followed(self):
-        target = self.stub()
-        s = self.stub(302, b"", Location=self.url(target) + "/chat")
-        with self.assertRaises(rules.ModelDown):
-            make_model(self.url(s), "t")("a", "b", None, 5)
-        self.assertEqual(target.seen, [])
 
 
 if __name__ == "__main__":

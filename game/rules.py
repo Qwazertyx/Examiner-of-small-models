@@ -134,7 +134,7 @@ def model_topic(topics, question, model):
     }
     try:
         topic = json.loads(model(system, question, schema, 12))["topic"]
-    except (ValueError, KeyError, TypeError) as e:
+    except (ValueError, KeyError, TypeError, RecursionError) as e:
         raise ModelDown("unreadable topic") from e
     return topic if topic in ids else None
 
@@ -143,7 +143,7 @@ def model_reply(suspect, question, fact, model):
     system = (f"You are {suspect['name']}, {suspect['role']}. {suspect['voice']} "
               "A detective is questioning you. Answer in character, in one or two short sentences. "
               f"Say only this, in your own words, and add no other facts: {fact}")
-    text = model(system, question, None, 60)
+    text = model(system, question, None, 48)
     if not isinstance(text, str) or not clean(text):
         raise ModelDown("empty reply")
     return clean(text)[:MAX_REPLY]
@@ -157,12 +157,14 @@ def ask(sc, req, model=None):
     suspect = sc["suspects"][suspect_id]
     topics = open_topics(suspect, state["clues"])
 
-    try:
-        if model is None:
-            raise ModelDown("no model configured")
-        topic_id = model_topic(topics, question, model)
-    except ModelDown:
-        model, topic_id = None, keyword_topic(topics, question)
+    why = None  # why a model was given but not used: shown to the player
+    # Keywords first: on a phone every model call costs seconds, and the suggested questions always match.
+    topic_id = keyword_topic(topics, question)
+    if topic_id is None and model is not None:
+        try:
+            topic_id = model_topic(topics, question, model)
+        except ModelDown as e:
+            model, why = None, str(e)
 
     topic = topics.get(topic_id)
     cracked = False
@@ -178,8 +180,8 @@ def ask(sc, req, model=None):
     if model is not None:
         try:
             reply = model_reply(suspect, question, fact, model)
-        except ModelDown:
-            model = None
+        except ModelDown as e:
+            model, why = None, str(e)
 
     found = gives is not None and gives not in state["clues"]
     clues = state["clues"] + ([gives] if found else [])
@@ -190,6 +192,7 @@ def ask(sc, req, model=None):
         "note": fact if topic is not None else None,
         "cracked": cracked,
         "source": "phone" if model is not None else "script",
+        "why": why,
         "new_clue": clue_view(sc, gives) if found else None,
         "state": {"clues": clues, "asked": asked},
         "remaining": sc["max_questions"] - asked,
@@ -224,7 +227,7 @@ def handle(method, raw, model=None, sc=SCENARIO):
         if req.get("action") == "accuse":
             return 200, accuse(sc, req)
         raise BadRequest("Unknown action.")
-    except ValueError:
+    except (ValueError, RecursionError):
         return 400, {"error": "Invalid JSON."}
     except BadRequest as e:
         return 400, {"error": str(e)}

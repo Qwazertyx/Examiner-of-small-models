@@ -42,10 +42,16 @@ class Upstash:
         self._call("SET", key, value, "EX", ttl)
 
     def incr(self, key, ttl):
-        n = self._call("INCR", key)
-        if n == 1:
-            self._call("EXPIRE", key, ttl)
-        return n
+        # Created with its expiry first: a counter can never outlive its window if a call fails.
+        self._call("SET", key, 0, "EX", ttl, "NX")
+        return self._call("INCR", key)
+
+    def lock(self, key, ttl):
+        """True if the key was free; it is then held for `ttl` seconds."""
+        return self._call("SET", key, 1, "EX", ttl, "NX") is not None
+
+    def delete(self, *keys):
+        self._call("DEL", *keys)
 
     def push(self, key, value, ttl):
         self._call("RPUSH", key, value)
@@ -93,6 +99,18 @@ class Memory:
             n = (int(item[1]) if item else 0) + 1
             self.data[key] = (item[0] if item else time.monotonic() + ttl, str(n))
             return n
+
+    def lock(self, key, ttl):
+        with self.cond:
+            if self._live(key):
+                return False
+            self.data[key] = (time.monotonic() + ttl, "1")
+            return True
+
+    def delete(self, *keys):
+        with self.cond:
+            for key in keys:
+                self.data.pop(key, None)
 
     def push(self, key, value, ttl):
         with self.cond:

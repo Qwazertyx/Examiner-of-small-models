@@ -48,6 +48,32 @@ class MemoryTest(unittest.TestCase):
         with patch.object(store_mod.time, "monotonic", return_value=111.0):
             self.assertEqual(m.incr("n", 10), 1)  # expired at 110, not extended to 115
 
+    def test_lock_second_fails_while_held(self):
+        m = Memory()
+        self.assertTrue(m.lock("l", 10))
+        self.assertFalse(m.lock("l", 10))
+
+    def test_lock_after_delete(self):
+        m = Memory()
+        m.lock("l", 10)
+        m.delete("l")
+        self.assertTrue(m.lock("l", 10))
+
+    def test_lock_after_expiry(self):
+        m = Memory()
+        with patch.object(store_mod.time, "monotonic", return_value=100.0):
+            self.assertTrue(m.lock("l", 10))
+            self.assertFalse(m.lock("l", 10))
+        with patch.object(store_mod.time, "monotonic", return_value=111.0):
+            self.assertTrue(m.lock("l", 10))
+
+    def test_delete_several_keys(self):
+        m = Memory()
+        for k in "abc":
+            m.set(k, "1", 10)
+        m.delete("a", "b", "missing")
+        self.assertEqual([m.get(k) for k in "abc"], [None, None, "1"])
+
     def test_fifo(self):
         m = Memory()
         for v in "abc":
@@ -78,7 +104,7 @@ class StubRedis:
     """Imitates the Upstash REST API on 127.0.0.1."""
 
     def __init__(self):
-        self.data, self.calls, self.auth, self.mode = {}, [], [], "ok"
+        self.data, self.calls, self.auth, self.mode, self.ttl = {}, [], [], "ok", {}
         outer = self
 
         class H(http.server.BaseHTTPRequestHandler):
@@ -116,10 +142,22 @@ class StubRedis:
         if op == "GET":
             return d.get(key)
         if op == "SET":
+            opts = [str(x) for x in a[1:]]
+            if "NX" in opts and key in d:
+                return None
             d[key] = a[0]
+            if "EX" in opts:
+                self.ttl[key] = int(opts[opts.index("EX") + 1])
+            else:
+                self.ttl.pop(key, None)  # a plain SET drops the expiry, as in Redis
             return "OK"
+        if op == "DEL":
+            gone = [k for k in [key, *a] if d.pop(k, None) is not None]
+            for k in gone:
+                self.ttl.pop(k, None)
+            return len(gone)
         if op == "INCR":
-            d[key] = str(int(d.get(key, 0)) + 1)
+            d[key] = str(int(d.get(key, 0)) + 1)  # keeps the key's expiry
             return int(d[key])
         if op == "EXPIRE":
             return 1
@@ -129,6 +167,10 @@ class StubRedis:
         if op == "LPOP":
             return d[key].pop(0) if d.get(key) else None
         raise AssertionError(cmd)
+
+    def expire_now(self, key):
+        self.data.pop(key, None)
+        self.ttl.pop(key, None)
 
     def count(self, op):
         return sum(1 for c in self.calls if c[0] == op)
@@ -158,10 +200,31 @@ class UpstashTest(unittest.TestCase):
         self.up.push("l", "b", 9)
         self.assertEqual([self.up.pop("l", 0, every=0.05), self.up.pop("l", 0, every=0.05)], ["a", "b"])
 
-    def test_incr_expires_once(self):
-        for _ in range(3):
-            self.up.incr("n", 9)
-        self.assertEqual(self.stub.count("EXPIRE"), 1)
+    def test_incr_sends_set_nx_then_incr_and_keeps_counting(self):
+        self.assertEqual([self.up.incr("n", 9) for _ in range(3)], [1, 2, 3])
+        self.assertEqual(self.stub.calls[:2], [["SET", "n", "0", "EX", "9", "NX"], ["INCR", "n"]])
+        self.assertEqual([c[0] for c in self.stub.calls], ["SET", "INCR"] * 3)
+        self.assertEqual(self.stub.count("EXPIRE"), 0)
+        self.assertEqual(self.stub.ttl["n"], 9)  # INCR did not drop the expiry
+
+    def test_lock_second_fails_while_held(self):
+        self.assertTrue(self.up.lock("l", 7))
+        self.assertFalse(self.up.lock("l", 7))
+        self.assertEqual(self.stub.calls[0], ["SET", "l", "1", "EX", "7", "NX"])
+
+    def test_lock_after_delete_and_after_expiry(self):
+        self.up.lock("l", 7)
+        self.up.delete("l")
+        self.assertTrue(self.up.lock("l", 7))
+        self.stub.expire_now("l")
+        self.assertTrue(self.up.lock("l", 7))
+
+    def test_delete_several_keys(self):
+        for k in "abc":
+            self.up.set(k, "1", 5)
+        self.up.delete("a", "b")
+        self.assertEqual(self.stub.calls[-1], ["DEL", "a", "b"])
+        self.assertEqual([self.up.get(k) for k in "abc"], [None, None, "1"])
 
     def test_pop_gets_value_pushed_during_wait(self):
         later(0.1, lambda: self.up.push("l", "x", 9))
@@ -213,8 +276,8 @@ class MakeStoreTest(unittest.TestCase):
         self.assertIsInstance(self.make(), Memory)
 
 
-CODE = "A" * 22
-OTHER = "B" * 22
+PART = "A" * 24
+CODE = PART + phone._sign(PART)  # validly signed, never paired
 
 
 class PhoneTest(unittest.TestCase):
@@ -227,11 +290,82 @@ class PhoneTest(unittest.TestCase):
     def test_pair_and_status(self):
         code = self.paired()
         self.assertRegex(code, phone.CODE)
-        self.assertEqual(phone.status(self.s, code)["status"], "waiting")
+        self.assertEqual(phone.status(self.s, {"code": code})["status"], "waiting")
         with self.assertRaises(phone.Gone):
-            phone.status(self.s, CODE)
+            phone.status(self.s, {"code": CODE})
         with self.assertRaises(rules.BadRequest):
-            phone.status(self.s, "bad")
+            phone.status(self.s, {"code": "bad"})
+
+    def test_status_has_no_ends_and_has_last_ms(self):
+        info = phone.status(self.s, {"code": self.paired()})
+        self.assertNotIn("ends", info)
+        self.assertIn("last_ms", info)
+
+    def test_made_up_strings_are_bad_request(self):
+        unpaired_but_wellformed = "x" * 24 + "0" * 16
+        for bad in ("x" * 20, "", "bad", unpaired_but_wellformed, None, 5, ["a"], CODE + "0", CODE[:-1]):
+            for fn in (phone.status, phone.bye, phone.hello, phone.next_job, phone.done):
+                with self.subTest(code=bad, fn=fn.__name__), self.assertRaises(rules.BadRequest):
+                    fn(self.s, {"code": bad, "status": "ready", "id": "a" * 32, "text": "x"})
+        with self.assertRaises(rules.BadRequest):
+            phone.status(self.s, {})
+
+    def test_bad_code_never_touches_store(self):
+        with self.assertRaises(rules.BadRequest):
+            phone.status(FakeStoreDown(), {"code": "x" * 20})
+
+    def test_changed_last_hex_char_is_rejected(self):
+        code = self.paired()
+        self.assertTrue(phone.valid(code))
+        forged = code[:-1] + ("0" if code[-1] != "0" else "1")
+        self.assertFalse(phone.valid(forged))
+        with self.assertRaises(rules.BadRequest):
+            phone.status(self.s, {"code": forged})
+
+    def test_valid_is_false_for_non_strings(self):
+        for x in (None, 5, 1.5, b"A" * 40, ["A" * 40], {"code": 1}, True):
+            self.assertFalse(phone.valid(x))
+        self.assertTrue(phone.valid(CODE))
+
+    def test_bye_deletes_pairing(self):
+        code = self.paired()
+        phone.hello(self.s, {"code": code, "status": "ready"})
+        self.assertEqual(phone.bye(self.s, {"code": code}), {"ok": True})
+        self.assertIsNone(self.s.get("pair:" + code))
+        calls = (phone.status, phone.hello, phone.next_job, phone.done)
+        for fn in calls:
+            with self.subTest(fn=fn.__name__), self.assertRaises(phone.Gone):
+                fn(self.s, {"code": code, "status": "ready", "id": "a" * 32, "text": "x"})
+
+    def test_bye_bad_code_and_unknown_code(self):
+        with self.assertRaises(rules.BadRequest):
+            phone.bye(self.s, {"code": "bad"})
+        self.assertEqual(phone.bye(self.s, {"code": CODE}), {"ok": True})
+
+    def test_pair_writes_end_time(self):
+        with patch.object(phone.time, "time", return_value=1000.0):
+            code = self.paired()
+        self.assertEqual(json.loads(self.s.get("pair:" + code))["ends"], 1000.0 + phone.PAIR_TTL)
+
+    def test_pairing_gone_after_end_even_if_key_exists(self):
+        code = self.paired()
+        ends = json.loads(self.s.get("pair:" + code))["ends"]
+        self.assertIsNotNone(self.s.get("pair:" + code))
+        with patch.object(phone.time, "time", return_value=ends + 1):
+            for fn in (phone.status, phone.hello, phone.next_job, phone.done):
+                with self.subTest(fn=fn.__name__), self.assertRaises(phone.Gone):
+                    fn(self.s, {"code": code, "status": "ready", "id": "a" * 32, "text": "x"})
+        self.assertEqual(phone.status(self.s, {"code": code})["status"], "waiting")
+
+    def test_hello_does_not_extend_end_time(self):
+        code = self.paired()
+        ends = json.loads(self.s.get("pair:" + code))["ends"]
+        with patch.object(phone.time, "time", return_value=ends - 100):
+            phone.hello(self.s, {"code": code, "status": "ready"})
+        self.assertEqual(json.loads(self.s.get("pair:" + code))["ends"], ends)
+
+    def test_pairs_per_hour_is_ten(self):
+        self.assertEqual(phone.PAIRS_PER_HOUR, 10)
 
     def test_rate_limit(self):
         for _ in range(phone.PAIRS_PER_HOUR):
@@ -245,7 +379,7 @@ class PhoneTest(unittest.TestCase):
         for r in ({"status": "loading", "progress": 0.5}, {"status": "ready"},
                   {"status": "failed", "detail": "no webgpu"}):
             self.assertEqual(phone.hello(self.s, {"code": code, **r}), {"ok": True})
-        self.assertEqual(phone.status(self.s, code)["detail"], "no webgpu")
+        self.assertEqual(phone.status(self.s, {"code": code})["detail"], "no webgpu")
 
     def test_hello_rejects(self):
         code = self.paired()
@@ -259,7 +393,7 @@ class PhoneTest(unittest.TestCase):
     def test_hello_truncates(self):
         code = self.paired()
         phone.hello(self.s, {"code": code, "status": "ready", "model": "m" * 100, "detail": "d" * 300})
-        info = phone.status(self.s, code)
+        info = phone.status(self.s, {"code": code})
         self.assertEqual((len(info["model"]), len(info["detail"])), (60, 120))
 
     def test_hello_gone_and_malformed(self):
@@ -271,22 +405,75 @@ class PhoneTest(unittest.TestCase):
     def test_status_alive(self):
         code = self.paired()
         phone.hello(self.s, {"code": code, "status": "ready"})
-        self.assertEqual(phone.status(self.s, code)["status"], "asleep")
+        self.assertEqual(phone.status(self.s, {"code": code})["status"], "asleep")
         with patch.object(phone, "PHONE_WAIT", 0.05):
             phone.next_job(self.s, {"code": code})
-        self.assertEqual(phone.status(self.s, code)["status"], "ready")
+        self.assertEqual(phone.status(self.s, {"code": code})["status"], "ready")
         self.s.data.pop("alive:" + code)
-        self.assertEqual(phone.status(self.s, code)["status"], "asleep")
+        self.assertEqual(phone.status(self.s, {"code": code})["status"], "asleep")
 
     def test_next_job(self):
         code = self.paired()
         with patch.object(phone, "PHONE_WAIT", 0.05):
             self.assertEqual(phone.next_job(self.s, {"code": code}), {"job": None})
             self.assertIsNotNone(self.s.get("alive:" + code))
-            self.s.push("jobs:" + code, json.dumps({"id": "x"}), 10)
+            self.s.push("jobs:" + code, json.dumps({"id": "x", "deadline": time.time() + 30}), 10)
             self.assertEqual(phone.next_job(self.s, {"code": code}), {"job": {"id": "x"}})
             with self.assertRaises(phone.Gone):
                 phone.next_job(self.s, {"code": CODE})
+
+    def test_second_concurrent_poll_sleeps_and_returns_none(self):
+        code = self.paired()
+        self.push_job(code, "x", 30)
+        self.assertTrue(self.s.lock("poll:" + code, 30))
+        with patch.object(phone.time, "sleep") as sl:
+            self.assertEqual(phone.next_job(self.s, {"code": code}), {"job": None})
+        sl.assert_called_once_with(2)
+        self.assertIsNotNone(self.s.get("jobs:" + code))  # the job was left for the poll that holds the lock
+        self.assertIsNotNone(self.s.get("poll:" + code))  # and the holder's lock is untouched
+
+    def test_poll_lock_released_when_poll_ends(self):
+        code = self.paired()
+        with patch.object(phone, "PHONE_WAIT", 0.05):
+            phone.next_job(self.s, {"code": code})
+            self.assertIsNone(self.s.get("poll:" + code))
+            self.push_job(code, "x", 30)
+            self.assertEqual(phone.next_job(self.s, {"code": code}), {"job": {"id": "x"}})
+            self.assertIsNone(self.s.get("poll:" + code))
+
+    def push_job(self, code, id, ahead):
+        self.s.push("jobs:" + code, json.dumps({"id": id, "deadline": time.time() + ahead}), 10)
+
+    def test_next_job_skips_stale_and_returns_fresh(self):
+        code = self.paired()
+        self.push_job(code, "old", -5)
+        self.push_job(code, "new", 30)
+        with patch.object(phone, "PHONE_WAIT", 0.05):
+            self.assertEqual(phone.next_job(self.s, {"code": code}), {"job": {"id": "new"}})
+
+    def test_next_job_skips_job_with_less_than_min_left(self):
+        code = self.paired()
+        self.push_job(code, "tight", 1)
+        with patch.object(phone, "PHONE_WAIT", 0.05), patch.object(phone, "MIN_LEFT", 4):
+            self.assertEqual(phone.next_job(self.s, {"code": code}), {"job": None})
+
+    def test_next_job_has_no_deadline_key(self):
+        code = self.paired()
+        self.push_job(code, "x", 30)
+        with patch.object(phone, "PHONE_WAIT", 0.05):
+            self.assertNotIn("deadline", phone.next_job(self.s, {"code": code})["job"])
+
+    def test_done_ms_stored_in_status(self):
+        code = self.paired()
+        self.assertIsNone(phone.status(self.s, {"code": code})["last_ms"])
+        phone.done(self.s, {"code": code, "id": "a" * 32, "text": "x", "ms": 1234})
+        self.assertEqual(phone.status(self.s, {"code": code})["last_ms"], 1234)
+
+    def test_done_bad_ms(self):
+        code = self.paired()
+        for ms in (-1, 700000, "12", True, 1.5):
+            with self.subTest(ms=ms), self.assertRaises(rules.BadRequest):
+                phone.done(self.s, {"code": code, "id": "a" * 32, "text": "x", "ms": ms})
 
     def test_done(self):
         code = self.paired()
@@ -343,6 +530,19 @@ class PhoneModelTest(unittest.TestCase):
         self.assertEqual(set(job), {"id", "system", "user", "schema", "max_tokens"})
         self.assertEqual((job["system"], job["user"], job["max_tokens"]), ("sys", "usr", 7))
 
+    def test_calls_share_one_deadline(self):
+        self.s.set("alive:" + self.code, "1", 30)
+        fp = FakePhone(self.s, self.code, lambda j: "pong")
+        self.addCleanup(fp.close)
+        with patch.object(phone, "QUESTION_BUDGET", 0.4), patch.object(phone, "MIN_LEFT", 0.3):
+            model = phone.phone_model(self.s, self.code)
+            time.sleep(0.2)  # first call's share of the budget
+            t = time.monotonic()
+            with self.assertRaises(rules.ModelDown) as c:
+                model("s", "u", None, 1)
+            self.assertEqual(str(c.exception), "slow")
+            self.assertLess(time.monotonic() - t, 0.2)
+
     def test_not_alive_is_immediate(self):
         t = time.monotonic()
         with self.assertRaises(rules.ModelDown):
@@ -352,8 +552,60 @@ class PhoneModelTest(unittest.TestCase):
 
     def test_no_answer(self):
         self.s.set("alive:" + self.code, "1", 30)
-        with patch.object(phone, "ANSWER_WAIT", 0.1), self.assertRaises(rules.ModelDown):
+        with patch.object(phone, "QUESTION_BUDGET", 0.3), patch.object(phone, "MIN_LEFT", 0.05), self.assertRaises(rules.ModelDown):
             phone.phone_model(self.s, self.code)("s", "u", None, 1)
+
+    def alive(self):
+        self.s.set("alive:" + self.code, "1", 30)
+
+    def test_busy_when_another_question_holds_the_lock(self):
+        self.alive()
+        with patch.object(phone, "QUESTION_BUDGET", 30), patch.object(phone, "MIN_LEFT", 60):
+            first = phone.phone_model(self.s, self.code)
+            second = phone.phone_model(self.s, self.code)
+            with self.assertRaises(rules.ModelDown):
+                first("s", "u", None, 1)  # takes the lock, then fails as too slow
+        with self.assertRaises(rules.ModelDown) as c:
+            second("s", "u", None, 1)
+        self.assertEqual(str(c.exception), "busy")
+        self.assertIsNotNone(self.s.get("busy:" + self.code))
+
+    def test_release_frees_the_code(self):
+        self.alive()
+        fp = FakePhone(self.s, self.code, lambda j: "pong")
+        self.addCleanup(fp.close)
+        first = phone.phone_model(self.s, self.code)
+        self.assertEqual(first("s", "u", None, 1), "pong")
+        busy = phone.phone_model(self.s, self.code)
+        with self.assertRaises(rules.ModelDown) as c:
+            busy("s", "u", None, 1)
+        self.assertEqual(str(c.exception), "busy")
+        first.release()
+        self.assertIsNone(self.s.get("busy:" + self.code))
+        self.assertEqual(phone.phone_model(self.s, self.code)("s", "u", None, 1), "pong")
+
+    def test_lock_taken_once_for_several_calls(self):
+        self.alive()
+        fp = FakePhone(self.s, self.code, lambda j: "pong")
+        self.addCleanup(fp.close)
+        model = phone.phone_model(self.s, self.code)
+        self.assertEqual([model("s", "u", None, 1), model("s", "u", None, 1)], ["pong", "pong"])
+        model.release()
+
+    def test_release_is_noop_if_nothing_locked(self):
+        self.s.set("busy:" + self.code, "1", 30)  # someone else's lock
+        phone.phone_model(self.s, self.code).release()
+        self.assertIsNotNone(self.s.get("busy:" + self.code))
+
+    def test_release_swallows_store_down(self):
+        self.alive()
+        with patch.object(phone, "QUESTION_BUDGET", 30), patch.object(phone, "MIN_LEFT", 60):
+            model = phone.phone_model(self.s, self.code)
+            with self.assertRaises(rules.ModelDown):
+                model("s", "u", None, 1)
+        self.assertIsNotNone(self.s.get("busy:" + self.code))  # locked now; make the store fail on delete
+        with patch.object(self.s, "delete", side_effect=StoreDown("x")):
+            model.release()
 
     def test_store_down(self):
         class Dead:
@@ -369,7 +621,7 @@ class PhoneModelTest(unittest.TestCase):
         self.s.set("alive:" + self.code, "1", 30)
         # a phone answering every job under code `other` must not satisfy a call for self.code
         self.s.push("res:" + other + ":" + "a" * 32, "leak", 10)
-        with patch.object(phone, "ANSWER_WAIT", 0.1), patch.object(phone.secrets, "token_hex", return_value="a" * 32):
+        with patch.object(phone, "QUESTION_BUDGET", 0.3), patch.object(phone, "MIN_LEFT", 0.05), patch.object(phone.secrets, "token_hex", return_value="a" * 32):
             with self.assertRaises(rules.ModelDown):
                 phone.phone_model(self.s, self.code)("s", "u", None, 1)
 
@@ -386,6 +638,19 @@ class PhoneModelTest(unittest.TestCase):
         self.s.data.clear()
         out = rules.ask(sc, r, phone.phone_model(self.s, self.code))
         self.assertEqual(out["source"], "script")
+
+
+class ModelRecursionTest(unittest.TestCase):
+    def test_deeply_nested_model_output_falls_back(self):
+        sc = rules.SCENARIO
+        sid = next(iter(sc["suspects"]))
+        r = {"action": "ask", "suspect": sid, "question": "zzz qqq",
+             "state": {"clues": list(sc["start_clues"]), "asked": 0}}
+        out = rules.ask(sc, r, lambda *a: "[" * 100000 + "]" * 100000)
+        self.assertEqual(out["source"], "script")
+        topics = sc["suspects"][sid]["topics"]
+        with self.assertRaises(rules.ModelDown):
+            rules.model_topic(topics, "q", lambda *a: "[" * 100000)
 
 
 class FakeStoreDown:
@@ -439,16 +704,74 @@ class HttpPhoneTest(unittest.TestCase):
         st, body = self.post({"action": "pair"})
         self.assertEqual(st, 200)
         code = body["code"]
-        st, body = self.call("GET", "/api/game?phone=" + code)
+        st, body = self.post({"action": "phone_status", "code": code})
         self.assertEqual((st, body["status"]), (200, "waiting"))
-        self.assertEqual(self.call("GET", "/api/game?phone=" + CODE)[0], 410)
-        self.assertEqual(self.call("GET", "/api/game?phone=bad")[0], 400)
+        self.assertNotIn("ends", body)
+        self.assertEqual(self.post({"action": "phone_status", "code": CODE})[0], 410)
+        self.assertEqual(self.post({"action": "phone_status", "code": "bad"})[0], 400)
+
+    def test_get_phone_query_is_just_the_public_view(self):
+        code = self.pair()
+        self.assertEqual(self.call("GET", "/api/game?phone=x"), self.call("GET", "/api/game"))
+        st, body = self.call("GET", "/api/game?phone=" + code)
+        self.assertEqual(st, 200)
+        self.assertNotIn("status", body)
+        self.assertIn("suspects", body)
+
+    def test_phone_bye(self):
+        code = self.pair()
+        self.assertEqual(self.post({"action": "phone_bye", "code": code}), (200, {"ok": True}))
+        for action in ("phone_status", "phone_hello", "phone_next", "phone_done"):
+            with self.subTest(action=action):
+                st = self.post({"action": action, "code": code, "status": "ready", "id": "a" * 32, "text": "x"})[0]
+                self.assertEqual(st, 410)
+
+    def test_invalid_code_is_400_before_rate_counter(self):
+        for action in ("phone_status", "phone_bye", "phone_hello", "phone_next", "phone_done"):
+            with self.subTest(action=action):
+                self.assertEqual(self.post({"action": action, "code": "x" * 20})[0], 400)
+        self.assertFalse([k for k in self.s.data if k.startswith("rate:req:")])
+
+    def test_request_limit_returns_429(self):
+        code = self.pair()  # 1st counted request
+        with patch.object(api.game, "REQUESTS_PER_MINUTE", 2):
+            self.assertEqual(self.post({"action": "phone_status", "code": code})[0], 200)
+            st, body = self.post({"action": "phone_status", "code": code})
+            self.assertEqual(st, 429)
+            self.assertIn("error", body)
+
+    def test_request_limit_counts_pair_and_phone_asks(self):
+        with patch.object(api.game, "REQUESTS_PER_MINUTE", 2):
+            code = self.pair()
+            self.assertEqual(self.post(self.ask_body(mode="phone", code=code))[0], 200)
+            self.assertEqual(self.post(self.ask_body(mode="phone", code=code))[0], 429)
+
+    def test_scripted_ask_never_touches_store(self):
+        class Raises:
+            def __getattr__(self, name):
+                raise AssertionError("store touched: " + name)
+        with patch.object(api.game, "STORE", Raises()):
+            for extra in ({"mode": "scripted"}, {}, {"mode": "phone", "code": "bad"}):
+                with self.subTest(extra=extra):
+                    st, body = self.post(self.ask_body(**extra))
+                    self.assertEqual((st, body["source"]), (200, "script"))
+
+    def test_deeply_nested_json_is_400(self):
+        c = http.client.HTTPConnection("127.0.0.1", self.port, timeout=5)
+        try:
+            raw = "[" * 2000 + "]" * 2000
+            c.request("POST", "/api/game", raw, {"Content-Type": "application/json"})
+            r = c.getresponse()
+            self.assertEqual(r.status, 400)
+            self.assertIn("error", json.loads(r.read()))
+        finally:
+            c.close()
 
     def test_phone_actions(self):
         code = self.pair()
         self.assertEqual(self.post({"action": "phone_hello", "code": code, "status": "ready"}), (200, {"ok": True}))
         self.assertEqual(self.post({"action": "phone_next", "code": code}), (200, {"job": None}))
-        self.assertEqual(self.call("GET", "/api/game?phone=" + code)[1]["status"], "ready")
+        self.assertEqual(self.post({"action": "phone_status", "code": code})[1]["status"], "ready")
         self.assertEqual(self.post({"action": "phone_done", "code": code, "id": "zz", "text": "x"})[0], 400)
         self.assertEqual(self.post({"action": "phone_next", "code": CODE})[0], 410)
 
@@ -469,7 +792,7 @@ class HttpPhoneTest(unittest.TestCase):
     def test_store_none(self):
         with patch.object(api.game, "STORE", None):
             self.assertEqual(self.post({"action": "pair"})[0], 503)
-            self.assertEqual(self.call("GET", "/api/game?phone=" + CODE)[0], 503)
+            self.assertEqual(self.post({"action": "phone_status", "code": CODE})[0], 503)
             self.assertEqual(self.post(self.ask_body())[0], 200)
 
     def test_store_down(self):

@@ -43,6 +43,9 @@ def labels(lead_list):
     return [x["label"] for x in lead_list]
 
 
+NOMATCH = "Tell me something."  # matches no keyword: forces the model classification
+
+
 class Gating(unittest.TestCase):
     def test_scripted_hidden_then_open(self):
         r = ask(req("chloe", DOOR_Q, ["crumbs"]))
@@ -61,14 +64,14 @@ class Gating(unittest.TestCase):
 
     def test_model_prompt_hides_topic(self):
         model, calls = self.fake('{"topic": "none"}')
-        ask(req("chloe", DOOR_Q, ["crumbs"]), model)
+        ask(req("chloe", NOMATCH, ["crumbs"]), model)
         system, schema = next(c for c in calls if c[1] is not None)
         self.assertNotIn("door", schema["properties"]["topic"]["enum"])
         self.assertNotIn("the door she heard", system)
 
     def test_model_forced_hidden_topic_dodges(self):
         model, _ = self.fake('{"topic": "door"}')
-        r = ask(req("chloe", DOOR_Q, ["crumbs"]), model)
+        r = ask(req("chloe", NOMATCH, ["crumbs"]), model)
         self.assertIsNone(r["note"])
         self.assertEqual(r["note"], None)
         self.assertEqual(CHLOE["dodge"], rules.ask(SC, req("chloe", "zzz"), None)["reply"])
@@ -82,13 +85,13 @@ class Gating(unittest.TestCase):
                 return '{"topic": "door"}'
             seen.append(system)
             return "dodging"
-        r = ask(req("chloe", DOOR_Q, ["crumbs"]), model)
+        r = ask(req("chloe", NOMATCH, ["crumbs"]), model)
         self.assertIsNone(r["note"])
         self.assertIn(CHLOE["dodge"], seen[0])
 
     def test_model_open_topic_in_enum(self):
         model, calls = self.fake('{"topic": "none"}')
-        ask(req("chloe", DOOR_Q, ["crumbs", "mug"]), model)
+        ask(req("chloe", NOMATCH, ["crumbs", "mug"]), model)
         _, schema = next(c for c in calls if c[1] is not None)
         self.assertIn("door", schema["properties"]["topic"]["enum"])
 

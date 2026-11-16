@@ -4,7 +4,6 @@ import json
 import os
 import sys
 from http.server import BaseHTTPRequestHandler
-from urllib.parse import parse_qs, urlsplit
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -12,8 +11,16 @@ from game import phone, rules  # noqa: E402
 from game.store import StoreDown, make_store  # noqa: E402
 
 MAX_BODY = 4096
+REQUESTS_PER_MINUTE = 90  # per address, on actions that touch the store; a real game needs about 30
 STORE = make_store()
-PHONE_ACTIONS = {"phone_hello": phone.hello, "phone_next": phone.next_job, "phone_done": phone.done}
+PHONE_ACTIONS = {
+    "phone_status": phone.status, "phone_bye": phone.bye,
+    "phone_hello": phone.hello, "phone_next": phone.next_job, "phone_done": phone.done,
+}
+
+
+class TooMany(Exception):
+    pass
 
 
 def client_id(h):
@@ -22,39 +29,36 @@ def client_id(h):
     return hashlib.sha256(ip.encode()).hexdigest()[:16]  # rate limits key on a hash, not the address
 
 
-def get(h):
-    code = parse_qs(urlsplit(h.path).query).get("phone", [None])[0]
-    if code is None:
-        return rules.handle("GET", b"")
-    if STORE is None:
-        return 503, {"error": "Phone mode is not set up on this site."}
-    return 200, phone.status(STORE, code)
-
-
 def post(h, raw):
     req = json.loads(raw)
     if not isinstance(req, dict):
         raise rules.BadRequest("Expected a JSON object.")
     action = req.get("action")
-    if action == "pair" or action in PHONE_ACTIONS:
+    phone_mode = req.get("mode") == "phone" and phone.valid(req.get("code"))
+    if action == "pair" or action in PHONE_ACTIONS or phone_mode:
         if STORE is None:
             return 503, {"error": "Phone mode is not set up on this site."}
-        if action == "pair":
-            return 200, phone.pair(STORE, client_id(h))
+        if action in PHONE_ACTIONS:
+            phone._code(req)  # a guessed code is refused here, before it costs anything
+        if STORE.incr("rate:req:" + client_id(h), 60) > REQUESTS_PER_MINUTE:
+            raise TooMany()
+    if action == "pair":
+        return 200, phone.pair(STORE, client_id(h))
+    if action in PHONE_ACTIONS:
         return 200, PHONE_ACTIONS[action](STORE, req)
-    model = None
-    if req.get("mode") == "phone" and STORE is not None:
-        code = req.get("code")
-        if isinstance(code, str) and phone.CODE.fullmatch(code):
-            model = phone.phone_model(STORE, code)
-    # A phone that is asleep or too slow costs a written line, never the question.
-    return rules.handle("POST", raw, model)
+    model = phone.phone_model(STORE, req["code"]) if phone_mode and STORE is not None else None
+    try:
+        # A phone that is asleep or too slow costs a written line, never the question.
+        return rules.handle("POST", raw, model)
+    finally:
+        if model is not None:
+            model.release()
 
 
 def serve(h):
     try:
         if h.command == "GET":
-            status, payload = get(h)
+            status, payload = rules.handle("GET", b"")
         else:
             length = h.headers.get("Content-Length", "")
             # Requiring JSON keeps other sites from posting here with a plain HTML form.
@@ -64,10 +68,12 @@ def serve(h):
                 status, payload = 413, {"error": "Request too large."}
             else:
                 status, payload = post(h, h.rfile.read(int(length)))
-    except ValueError:
+    except (ValueError, RecursionError):
         status, payload = 400, {"error": "Invalid JSON."}
     except rules.BadRequest as e:
         status, payload = 400, {"error": str(e)}
+    except TooMany:
+        status, payload = 429, {"error": "Too many requests. Wait a minute."}
     except phone.Gone:
         status, payload = 410, {"error": "This game has ended. Scan a new code on the computer."}
     except StoreDown:

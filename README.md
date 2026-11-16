@@ -50,7 +50,7 @@ Python 3.12 or later, standard library only.
 
 ```bash
 python3 dev.py                          # http://127.0.0.1:8000
-python3 -m unittest discover tests      # 99 tests
+python3 -m unittest discover tests
 ```
 
 Locally the pairing lives in memory. A phone cannot run the model against the dev server:
@@ -79,15 +79,21 @@ WebGPU needs https, so the phone mode is tested on the deployed site.
    on `/api/game` in the Vercel Firewall.
 
 Upstash's REST API cannot block while waiting, so the server polls. A phone waiting for
-questions costs about 2,500 commands an hour; the free plan has 500,000 a month.
+questions costs about 3,500 commands an hour; the free plan has 500,000 a month. A pairing
+ends when the game ends, or after three hours at most.
 
 ## Security
 
 - The model never sees the culprit, and the server checks the phone's output: the topic must be one
   of the listed ones, and the text is cut to 300 characters and shown as plain text.
-- Pairing codes are random, expire after three hours, and are limited to 30 an hour per player.
-- The phone page loads its model library from one pinned version on jsDelivr, under its own
-  Content-Security-Policy that allows only that CDN and the model download hosts.
+- Pairing codes are random (144 bits) and signed, so a guessed code is refused without touching
+  the store. They end with the game, or after three hours at most, and are limited to 10 an hour
+  per player.
+- A code serves one poll and one question at a time, and every player address is limited to
+  90 phone requests a minute, so a script cannot multiply the store and function costs.
+- The phone page runs a self-hosted copy of WebLLM 0.2.88 (checked against two CDNs), under its
+  own Content-Security-Policy. It still downloads the model weights from Hugging Face and the
+  model's GPU library from MLC's GitHub repository, which it has to trust.
 - Everything the browser sends is validated; questions are capped at 200 characters and requests at 4 KB.
 - Model output is inserted as text, never as HTML, under a strict Content-Security-Policy.
 - Rate limits key on a hash of the player's address, never the address itself.
@@ -105,5 +111,5 @@ the proof can be obtained.
 ## Credits
 
 Typeface: Special Elite by Astigmatic, Apache License 2.0.
-QR codes: qrcode-generator 1.4.4 by Kazuhiko Arase, MIT License.
+QR codes: qrcode-generator 1.4.4 by Kazuhiko Arase, MIT License (`public/vendor/`).
 In-browser model: WebLLM by MLC, Apache License 2.0; Llama 3.2 1B, Llama 3.2 Community License.

@@ -37,10 +37,10 @@ function svg(tag, attrs, text) {
 const letter = (id) => String.fromCharCode(65 + [...clues.keys()].indexOf(id));
 const room = (id) => plan.rooms.find((r) => r.id === id);
 
-async function api(body, query = "") {
+async function api(body) {
   let res, data;
   try {
-    res = await fetch("/api/game" + query, body && {
+    res = await fetch("/api/game", body && {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
@@ -54,6 +54,13 @@ async function api(body, query = "") {
 }
 
 // ---- Start screen and the lending phone ----
+
+const WHY = {
+  asleep: "Written line: your phone is not connected. Keep its page open with the screen on.",
+  slow: "Written line: your phone took too long to answer.",
+  busy: "Written line: your phone was still on the previous question.",
+  store: "Written line: the link to your phone is down.",
+};
 
 const PHONE_STATES = {
   waiting: "Waiting for your phone.",
@@ -83,16 +90,18 @@ async function checkPhone() {
   if (over || mode !== "phone") return;
   let info;
   try {
-    info = await api(null, "?phone=" + encodeURIComponent(code));
+    // A POST keeps the code out of request logs, where a query string would land.
+    info = await api({ action: "phone_status", code });
   } catch (error) {
     info = { status: "waiting", detail: error.message };
   }
   const line = PHONE_STATES[info.status] || PHONE_STATES.waiting;
   const detail = info.status === "failed" && info.detail ? " " + info.detail : "";
   if (!$("game").hidden) {
-    $("voice").textContent = info.status === "ready"
+    const took = info.last_ms ? " Last answer took " + (info.last_ms / 1000).toFixed(1) + " s." : "";
+    $("voice").textContent = (info.status === "ready"
       ? "Voiced by your phone" + (info.model ? ", " + info.model : "") + "."
-      : line + " Until then the suspects use written lines.";
+      : line + " Until then the suspects use written lines.") + took;
   } else {
     $("phone-state").textContent = line + detail;
     const loading = info.status === "loading";
@@ -131,8 +140,15 @@ $("play-phone").addEventListener("click", async () => {
   checkPhone();
 });
 
+// Ends the pairing, so a phone left open stops polling at once instead of for three hours.
+function releasePhone() {
+  if (code) api({ action: "phone_bye", code }).catch(() => {});
+  code = null;
+}
+
 $("give-up").addEventListener("click", () => {
   clearTimeout(pollTimer);
+  releasePhone();
   mode = "scripted";
   begin();
 });
@@ -268,9 +284,9 @@ $("ask").addEventListener("submit", async (event) => {
     const answer = record("a", "A.", turn.reply);
     if (turn.cracked) answer.append(" ", el("span", "Statement changed", "stamp new"));
     if (mode === "phone") {
-      answer.append(el("small", turn.source === "phone"
-        ? "Answered by your phone." : "Written line: your phone did not answer in time."));
-      if (turn.source !== "phone") checkPhone();
+      answer.append(el("small", turn.source === "phone" ? "Answered by your phone."
+        : WHY[turn.why] || "Written line."));
+      if (turn.why) checkPhone();
     }
     if (turn.note) {
       $("notes-empty").hidden = true;
@@ -311,6 +327,7 @@ $("accuse").addEventListener("click", async () => {
     }
     over = true;
     clearTimeout(pollTimer);
+    releasePhone();
     refresh();
     $("accuse").disabled = true;
     $("verdict").hidden = false;

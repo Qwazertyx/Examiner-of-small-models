@@ -1,6 +1,7 @@
 // Lends this phone's browser to one game: the model runs here on WebGPU and
 // answers the jobs the server queues for the code in the URL hash.
-const LIB = "https://cdn.jsdelivr.net/npm/@mlc-ai/web-llm@0.2.88/lib/index.js";
+// Self-hosted copy of @mlc-ai/web-llm 0.2.88 (lib/index.js), so no third party serves code to this page.
+const LIB = "./vendor/web-llm-0.2.88.js";
 const MODEL = "Llama 3.2 1B";
 const HELLO_EVERY = 2000; // ms between progress reports while loading
 const RETRY = 2000;       // ms before retrying the server after a network error
@@ -84,6 +85,7 @@ async function serve(engine) {
     }
     $("live").textContent = "Answering a question…";
     let text;
+    const t0 = performance.now();
     try {
       text = await generate(engine, job);
     } catch (e) {
@@ -92,7 +94,7 @@ async function serve(engine) {
       return hello();
     }
     try {
-      await api({ action: "phone_done", id: job.id, text });
+      await api({ action: "phone_done", id: job.id, text, ms: Math.round(performance.now() - t0) });
     } catch (e) {
       if (e.message === "ended") return ended();
     }
@@ -120,6 +122,18 @@ async function start(lib, modelId) {
     clearInterval(timer);
     fail("Could not load the model: " + e.message,
       "Check the connection, close other apps and tabs, then reload this page.");
+    return hello();
+  }
+  // The first generation compiles the GPU kernels; pay that here, not on the player's first question.
+  $("loading-text").textContent = "Warming up…";
+  try {
+    await generate(engine, { system: "Reply with one word.", user: "Ready?", schema: null, max_tokens: 4 });
+    await generate(engine, { system: "Pick a topic.", user: "Hello", max_tokens: 8,
+      schema: { type: "object", properties: { topic: { type: "string", enum: ["a", "none"] } }, required: ["topic"] } });
+  } catch (e) {
+    clearInterval(timer);
+    fail("The model stopped working: " + e.message,
+      "Reload this page to try again. If it happens again, this phone may be out of memory.");
     return hello();
   }
   clearInterval(timer);

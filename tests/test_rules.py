@@ -23,6 +23,9 @@ def req(suspect="bruno", question="What did you see of the others?", clues=("cru
     return r
 
 
+NOMATCH = "Tell me something."  # matches no keyword of any suspect
+
+
 def ask(r, model=None):
     return rules.ask(SC, r, model)
 
@@ -149,31 +152,71 @@ class ModelPath(unittest.TestCase):
 
     def test_secret_containment(self):
         log = []
-        ask(req("ada", "Where were you this morning?"), fake('{"topic": "morning"}', "ok", log))
+        ask(req("ada", NOMATCH), fake('{"topic": "morning"}', "ok", log))
         self.assertGreaterEqual(len(log), 2)
         for system, user in log:
             for secret in ("8:50", SC["solution"], "culprit"):
                 self.assertNotIn(secret, system)
                 self.assertNotIn(secret, user)
 
-    def assertFallback(self, model, fact=MUG_FACT):
-        r = ask(req(), model)
+    def assertFallback(self, model, fact=MUG_FACT, question="What did you see of the others?"):
+        r = ask(req(question=question), model)
         self.assertEqual(r["source"], "script")
         self.assertEqual(r["reply"], fact)
 
     def test_fallbacks(self):
-        self.assertFallback(fake(topic=rules.ModelDown("x")))
-        self.assertFallback(fake(topic="not json"))
+        dodge = SC["suspects"]["bruno"]["dodge"]
+        self.assertFallback(fake(topic=rules.ModelDown("x")), dodge, NOMATCH)
+        self.assertFallback(fake(topic="not json"), dodge, NOMATCH)
         self.assertFallback(fake(reply=""))
         self.assertFallback(fake(reply=None))
         self.assertFallback(fake(reply=42))
 
     def test_topic_wrong_type(self):
         # a non-string topic means "no topic": the dodge line, through the model, no crash
-        r = ask(req(), fake(topic='{"topic": 5}', reply="Hm."))
+        r = ask(req(question=NOMATCH), fake(topic='{"topic": 5}', reply="Hm."))
         self.assertIsNone(r["note"])
         self.assertEqual(r["reply"], "Hm.")
         self.assertEqual(r["state"]["asked"], 1)
+
+    def test_keyword_match_never_calls_schema(self):
+        calls = []
+
+        def model(system, user, schema, max_tokens):
+            calls.append(schema)
+            return "ok"
+        r = ask(req(), model)
+        self.assertEqual(calls, [None])
+        self.assertEqual(r["note"], MUG_FACT)
+
+    def test_no_keyword_classifies_first_then_replies(self):
+        calls = []
+
+        def model(system, user, schema, max_tokens):
+            calls.append((schema is not None, max_tokens))
+            return '{"topic": "others"}' if schema else "ok"
+        r = ask(req(question=NOMATCH), model)
+        self.assertEqual([c[0] for c in calls], [True, False])
+        self.assertEqual(calls[1][1], 48)
+        self.assertEqual(r["note"], MUG_FACT)
+
+    def test_nomatch_really_matches_nothing(self):
+        for s in SC["suspects"].values():
+            self.assertIsNone(rules.keyword_topic(s["topics"], NOMATCH))
+
+    def test_why_none_without_model_and_with_working_model(self):
+        self.assertIsNone(ask(req())["why"])
+        self.assertIsNone(ask(req(), fake())["why"])
+        self.assertIsNone(ask(req(question=NOMATCH), fake())["why"])
+
+    def test_why_reports_model_down_reason(self):
+        for reason in ("slow", "asleep", "store", "anything"):
+            with self.subTest(reason, call="reply"):
+                r = ask(req(), fake(reply=rules.ModelDown(reason)))
+                self.assertEqual((r["source"], r["why"]), ("script", reason))
+            with self.subTest(reason, call="classify"):
+                r = ask(req(question=NOMATCH), fake(topic=rules.ModelDown(reason)))
+                self.assertEqual((r["source"], r["why"]), ("script", reason))
 
     def test_reply_cut(self):
         r = ask(req(), fake(reply="x" * (rules.MAX_REPLY + 50)))
